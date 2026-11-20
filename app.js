@@ -203,7 +203,7 @@ function payPopup(n){
 }
 
 /* ---------- receipts (print, save as PDF, or download) ---------- */
-const RCSS="body{font:15px system-ui,sans-serif;background:#fbf8f1;color:#221c14;margin:0}.sheet{max-width:520px;margin:auto;padding:22px}h2{margin:0 0 2px}table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.9rem}td,th{padding:7px 4px;border-bottom:1px dashed #c9bfa8;text-align:left}td:last-child,th:last-child{text-align:right}.line{display:flex;justify-content:space-between;padding:3px 0}.total{font-size:1.4rem;font-weight:800;display:flex;justify-content:space-between;margin:10px 0}.tag{color:#7a705c;font-size:.8rem}.qr{display:flex;gap:14px;align-items:center;margin-top:16px}.qr img{width:150px;border-radius:12px}";
+const RCSS="body{font:15px system-ui,sans-serif;background:#fbf8f1;color:#221c14;margin:0}.sheet{max-width:520px;margin:auto;padding:22px}h2{margin:0 0 2px}table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.9rem}td,th{padding:7px 4px;border-bottom:1px dashed #c9bfa8;text-align:left}td:last-child,th:last-child{text-align:right}.line{display:flex;justify-content:space-between;padding:3px 0}.total{font-size:1.4rem;font-weight:800;display:flex;justify-content:space-between;margin:10px 0}.tag{color:#7a705c;font-size:.8rem}.qr{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;margin-top:16px}.qr img{width:min(100%,320px);border-radius:12px}";
 function showReceipt(inner,title,extra=''){
   $('#sheet').className='sheet'; $('#sheet').onclick=null;
   $('#sheet').innerHTML=inner+extra+'<div class="btns"><button class="btn" id="rPrint">Print / Save PDF</button><button class="btn ghost" id="rDl">Download</button><button class="btn ghost" id="rClose">Close</button></div>';
@@ -397,3 +397,35 @@ $$('input[type=number]').forEach(i=>i.addEventListener('wheel',()=>i.blur()));
 render(); syncNow();
 /* re-check locks every minute so days lock themselves at 1 AM */
 setInterval(()=>{$('#date').max=today();renderForm();renderHist();renderLocks()},60000);
+
+/* ---------- hard refresh + "new update" popup ---------- */
+const assetUrls=()=>[...document.querySelectorAll('script[src],link[rel=stylesheet]')].map(n=>n.getAttribute('src')||n.getAttribute('href')).filter(u=>!/^https?:/.test(u));
+async function hardRefresh(){
+  try{if('serviceWorker' in navigator)(await navigator.serviceWorker.getRegistrations()).forEach(r=>r.unregister())}catch{}
+  try{if(window.caches)(await caches.keys()).forEach(k=>caches.delete(k))}catch{}
+  try{await Promise.all([location.pathname,...assetUrls()].map(u=>fetch(u,{cache:'reload'})))}catch{}
+  const u=new URL(location.href);u.searchParams.set('r',Date.now());location.replace(u.toString());
+}
+$('#hardRefresh').onclick=hardRefresh;
+let updShown=false, lastChk=0;
+function showUpdate(){
+  updShown=true;
+  const d=document.createElement('div');d.id='upd';
+  d.innerHTML='<span>🔄 A new update is ready</span><button class="btn" id="updNow">Update</button><button class="btn ghost" id="updLater">Later</button>';
+  document.body.appendChild(d);
+  $('#updNow').onclick=hardRefresh;
+  $('#updLater').onclick=()=>d.remove();
+}
+/* compares the copy this phone has saved with the copy on the server */
+async function checkUpdate(){
+  if(updShown||!navigator.onLine||Date.now()-lastChk<60000)return;
+  lastChk=Date.now();
+  try{
+    for(const u of [location.pathname,...assetUrls()]){
+      const [a,b]=await Promise.all([fetch(u,{cache:'force-cache'}).then(r=>r.text()),fetch(u,{cache:'no-store'}).then(r=>r.text())]);
+      if(a!==b){showUpdate();return}
+    }
+  }catch{}
+}
+setTimeout(checkUpdate,2000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
