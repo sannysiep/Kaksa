@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14111f">
+<title>Kaksa · Spending Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div><h1>My spending</h1><p id="cycleLabel"></p></div>
+  <div class="hrow"><span id="syncDot" title="Sync status"></span></div>
+</header>
+
+<main>
+  <!-- HOME / ADD -->
+  <section id="tab-add" class="tab on">
+    <div class="cycle">
+      <button class="icon" id="prevC">‹</button>
+      <div class="stats">
+        <div><small>I spent</small><b id="sMine"></b></div>
+        <div><small>Lent out</small><b id="sLent"></b></div>
+        <div><small>Still owed to me</small><b id="sOwed" class="gold"></b></div>
+      </div>
+      <button class="icon" id="nextC">›</button>
+    </div>
+
+    <div class="card" id="formCard">
+      <div class="seg" id="kind">
+        <button data-k="me" class="on">Just me</button>
+        <button data-k="other">Paid for someone</button>
+        <button data-k="split">Split</button>
+      </div>
+      <div class="row">
+        <input id="amt" type="number" inputmode="decimal" placeholder="Amount" step="any">
+        <div class="seg small" id="cur"><button data-c="KHR" class="on">៛ Riel</button><button data-c="USD">$ USD</button></div>
+      </div>
+      <div class="chips" id="cats"></div>
+      <input id="note" placeholder="Note (optional) e.g. lunch with Dara">
+      <div id="peopleBox" hidden>
+        <label id="peopleLabel">Who?</label>
+        <div class="chips" id="people"></div>
+        <div class="row"><input id="newPerson" placeholder="Add a new name"><button class="btn ghost" id="addPerson">Add</button></div>
+        <p id="splitHint" class="hint"></p>
+      </div>
+      <label>Date <span class="hint">(past days are fine, future days are not)</span></label>
+      <input id="date" type="date">
+      <p id="dayNote" class="note" hidden>🔒 This day is locked. Unlock it in Settings → Day locks.</p>
+      <button class="btn" id="saveEntry">Save spending</button>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="tab-hist" class="tab">
+    <div class="card">
+      <div class="row"><input type="date" id="hFrom"><input type="date" id="hTo"></div>
+      <div class="row"><button class="btn ghost small" id="hCycle">Whole cycle</button><button class="btn ghost small" id="hWeek">Last 7 days</button><button class="btn ghost small" id="hAll">All</button></div>
+      <p class="hint" id="hTotal"></p>
+    </div>
+    <div id="histList"></div>
+  </section>
+
+  <!-- OWED -->
+  <section id="tab-owed" class="tab">
+    <div id="owedList"></div>
+  </section>
+
+  <!-- CHARTS -->
+  <section id="tab-chart" class="tab">
+    <div class="card">
+      <div class="row"><input type="date" id="cFrom"><input type="date" id="cTo"></div>
+      <div class="row"><button class="btn ghost" id="cCycle">This cycle</button><button class="btn ghost" id="cMonth">This month</button></div>
+      <p class="hint" id="cTotal"></p>
+      <canvas id="barChart" height="220"></canvas>
+    </div>
+    <div class="card"><canvas id="pieChart" height="240"></canvas></div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="tab-set" class="tab">
+    <div class="card">
+      <h3>Day locks</h3>
+      <p class="hint" id="lockMode"></p>
+      <div class="row"><button class="icon" id="lPrev">‹</button><b id="lockLabel" style="flex:1;text-align:center"></b><button class="icon" id="lNext">›</button></div>
+      <div class="grid" id="dayGrid"></div>
+      <p class="hint">Tap a day to lock or unlock it. A locked day can't get new spending or have entries deleted.</p>
+      <button class="btn" id="finishBack">Finished backfilling · lock past days</button>
+      <button class="btn ghost" id="backMode">Turn auto-lock off</button>
+    </div>
+    <div class="card">
+      <h3>General</h3>
+      <label>Show totals in</label>
+      <div class="seg small" id="dispSeg"><button data-c="KHR">៛ Riel</button><button data-c="USD">$ USD</button></div>
+      <label>Exchange rate (៛ per $1)</label>
+      <input id="rate" type="number">
+      <label>Cycle starts on day</label>
+      <input id="cycleDay" type="number" min="1" max="28">
+      <p class="hint">15 means 15th → 14th of next month, like your rent.</p>
+      <button class="btn" id="saveSet">Save settings</button>
+    </div>
+    <div class="card">
+      <h3>Sync across phone and PC</h3>
+      <p class="hint">Uses a private GitHub Gist. Setup steps are in README.md. Do the same on each device.</p>
+      <label>GitHub token (gist permission only)</label>
+      <input id="gToken" type="password" placeholder="ghp_...">
+      <label>Gist ID</label>
+      <input id="gId" placeholder="Leave empty to create a new one">
+      <button class="btn" id="saveSync">Save and sync now</button>
+      <p class="hint" id="syncMsg"></p>
+    </div>
+    <div class="card">
+      <h3>Backup</h3>
+      <div class="row"><button class="btn ghost" id="exp">Export JSON</button><button class="btn ghost" id="impBtn">Import JSON</button></div>
+      <input type="file" id="imp" accept=".json" hidden>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button data-t="add" class="on">➕<span>Add</span></button>
+  <button data-t="hist">🧾<span>History</span></button>
+  <button data-t="owed">🤝<span>Owed</span></button>
+  <button data-t="chart">📊<span>Charts</span></button>
+  <button data-t="set">⚙️<span>Settings</span></button>
+</nav>
+
+<div id="modal" hidden><div class="sheet" id="sheet"></div></div>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
