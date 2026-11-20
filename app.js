@@ -2,26 +2,31 @@
 // $ never returns null, so one missing element can't stop the other buttons from loading
 const $=s=>document.querySelector(s)||{style:{},dataset:{},classList:{toggle(){},add(){},remove(){}},addEventListener(){}};
 const $$=s=>[...document.querySelectorAll(s)];
-const CATS=['🍜 Food','🚕 Transport','🏠 Rent','🛍️ Shopping','💡 Bills','🎮 Fun','💊 Health','📦 Other'];
+const PARK='🅿️ Parking';
+const CATS=['🍜 Food','🚕 Transport',PARK,'🏠 Rent','🛍️ Shopping','💡 Bills','🎮 Fun','💊 Health','📦 Other'];
 const KEY='kaksa_v1', SYNC='kaksa_sync';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ymd=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const today=()=>ymd(new Date());
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
-let S=JSON.parse(localStorage.getItem(KEY)||'null')||{entries:[],payments:[],people:[],settings:{rate:4100,cycleDay:15,disp:'KHR',lockedBefore:null},dayLocks:{},updated:0};
-function fix(){S.dayLocks=S.dayLocks||{};S.settings=Object.assign({rate:4100,cycleDay:15,disp:'KHR',lockedBefore:null},S.settings||{})}
+let S=JSON.parse(localStorage.getItem(KEY)||'null')||{entries:[],payments:[],people:[],settings:{rate:4100,cycleDay:15,disp:'KHR',lockedBefore:null},dayLocks:{},qrs:[],updated:0};
+function fix(){S.dayLocks=S.dayLocks||{};S.deleted=S.deleted||{};S.qrs=S.qrs||[];S.settings=Object.assign({rate:4100,cycleDay:15,disp:'KHR',lockedBefore:null,parkRate:500,qrActive:null},S.settings||{})}
 fix();
 let sync=JSON.parse(localStorage.getItem(SYNC)||'{}');
 let form={kind:'me',cur:'KHR',cat:CATS[0],people:[]}, cOff=0, charts={};
 
 /* ---------- money helpers ---------- */
 const rate=()=>+S.settings.rate||4100;
+const parkRate=()=>+S.settings.parkRate||500;
 const toKHR=(a,c)=>c==='USD'?a*rate():a;
 const fmt=k=>S.settings.disp==='USD'?'$'+(k/rate()).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'៛'+Math.round(k).toLocaleString();
 const orig=(a,c)=>c==='USD'?'$'+(+a).toFixed(2):'៛'+Math.round(a).toLocaleString();
 const mine=e=>e.kind==='me'?toKHR(e.amt,e.cur):e.kind==='split'?toKHR(e.amt,e.cur)/(e.people.length+1):0;
 const lent=e=>e.kind==='other'?toKHR(e.amt,e.cur):e.kind==='split'?toKHR(e.amt,e.cur)*e.people.length/(e.people.length+1):0;
+const mineN=e=>e.kind==='me'?e.amt:e.kind==='split'?e.amt/(e.people.length+1):0;
+const alt=k=>S.settings.disp==='USD'?'៛'+Math.round(k).toLocaleString():'$'+(k/rate()).toFixed(2);
+function totals(es){const t={khr:0,usd:0,lent:0};es.forEach(e=>{if(e.cur==='USD')t.usd+=mineN(e);else t.khr+=mineN(e);t.lent+=lent(e)});t.all=t.khr+t.usd*rate();return t}
 const owes=e=>e.kind==='other'?{[e.people[0]]:toKHR(e.amt,e.cur)}:e.kind==='split'?Object.fromEntries(e.people.map(p=>[p,toKHR(e.amt,e.cur)/(e.people.length+1)])):{};
 
 /* ---------- cycle ---------- */
@@ -55,10 +60,14 @@ function render(){
   const r=cycle(cOff);
   $('#cycleLabel').textContent=`${nice(r.from)} → ${nice(r.to)}`+(cOff?'':' · this cycle');
   const es=S.entries.filter(e=>inRange(e.date,r));
-  $('#sMine').textContent=fmt(es.reduce((s,e)=>s+mine(e),0));
-  $('#sLent').textContent=fmt(es.reduce((s,e)=>s+lent(e),0));
+  const t=totals(es);
+  $('#sTotal').textContent=fmt(t.all);
+  $('#dispName').textContent=S.settings.disp==='USD'?'USD':'riel';
+  $('#sKHR').textContent='៛ '+Math.round(t.khr).toLocaleString();
+  $('#sUSD').textContent='$ '+t.usd.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  $('#sLent').textContent=fmt(t.lent);
   $('#sOwed').textContent=fmt(Object.values(balances()).reduce((s,v)=>s+Math.max(v,0),0));
-  renderForm(); renderHist(); renderOwed(); renderSettings(); renderLocks();
+  renderForm(); renderHist(); renderOwed(); renderSettings(); renderLocks(); renderQrs();
   if($('#tab-chart').classList.contains('on')) renderCharts();
 }
 
@@ -70,14 +79,20 @@ function renderForm(){
   const pb=$('#peopleBox'); pb.hidden=form.kind==='me';
   $('#peopleLabel').textContent=form.kind==='other'?'Who did you pay for?':'Split with who? (you are included automatically)';
   $('#people').innerHTML=S.people.length?S.people.map(p=>`<button class="chip ${form.people.includes(p)?'on':''}" data-p="${esc(p)}">${esc(p)}</button>`).join(''):'<span class="hint">No names yet. Add one below.</span>';
-  const a=+$('#amt').value;
-  $('#splitHint').textContent=form.kind==='split'&&form.people.length&&a?`Each person pays ${orig(a/(form.people.length+1),form.cur)} (${form.people.length+1} people)`:'';
+  const park=form.cat===PARK, t=Math.max(1,parseInt($('#pTimes').value)||1);
+  $('#parkRow').hidden=!park; $('#amtRow').hidden=park;
+  $('#pTotal').textContent=`× ៛${parkRate()} = ៛${(t*parkRate()).toLocaleString()}`;
+  const a=park?t*parkRate():+$('#amt').value, cu=park?'KHR':form.cur;
+  $('#splitHint').textContent=form.kind==='split'&&form.people.length&&a?`Each person pays ${orig(a/(form.people.length+1),cu)} (${form.people.length+1} people)`:'';
   const dl=isLocked($('#date').value||today());$('#dayNote').hidden=!dl;$('#saveEntry').disabled=dl;
 }
 $('#kind').onclick=e=>{const k=e.target.dataset.k;if(k){form.kind=k;form.people=[];renderForm()}};
 $('#cur').onclick=e=>{const c=e.target.dataset.c;if(c){form.cur=c;renderForm()}};
 $('#cats').onclick=e=>{const c=e.target.dataset.c;if(c){form.cat=c;renderForm()}};
 $('#amt').oninput=renderForm;
+$('#pTimes').oninput=renderForm;
+$('#pMinus').onclick=()=>{$('#pTimes').value=Math.max(1,(parseInt($('#pTimes').value)||1)-1);renderForm()};
+$('#pPlus').onclick=()=>{$('#pTimes').value=(parseInt($('#pTimes').value)||1)+1;renderForm()};
 $('#people').onclick=e=>{
   const p=e.target.dataset.p; if(!p)return;
   if(form.kind==='other') form.people=[p];
@@ -92,13 +107,13 @@ $('#addPerson').onclick=()=>{
 };
 $('#date').max=today(); $('#date').value=today(); $('#date').onchange=renderForm;
 $('#saveEntry').onclick=()=>{
-  const amt=+$('#amt').value, date=$('#date').value;
+  const park=form.cat===PARK, times=Math.max(1,parseInt($('#pTimes').value)||1), amt=park?times*parkRate():+$('#amt').value, date=$('#date').value;
   if(!(amt>0)) return toast('Enter an amount');
   if(!date||date>today()) return toast('Pick today or a past day');
   if(isLocked(date)) return toast('🔒 That day is locked');
   if(form.kind!=='me'&&!form.people.length) return toast('Pick at least one person');
-  S.entries.push({id:uid(),date,amt,cur:form.cur,cat:form.cat,note:$('#note').value.trim(),kind:form.kind,people:[...form.people]});
-  $('#amt').value='';$('#note').value='';form.people=[];
+  S.entries.push({id:uid(),date,amt,cur:park?'KHR':form.cur,cat:form.cat,note:(park?`${times}× parking`+($('#note').value.trim()?' · ':''):'')+$('#note').value.trim(),kind:form.kind,people:[...form.people]});
+  $('#amt').value='';$('#note').value='';$('#pTimes').value=1;form.people=[];
   save(); toast('Saved ✓');
 };
 
@@ -110,7 +125,7 @@ function renderHist(){
   if(document.activeElement.id!=='hFrom')$('#hFrom').value=r.from;
   if(document.activeElement.id!=='hTo')$('#hTo').value=r.to;
   const es=S.entries.filter(e=>inRange(e.date,r)).sort((a,b)=>b.date.localeCompare(a.date));
-  $('#hTotal').textContent=`${es.length} entries · I spent ${fmt(es.reduce((s,e)=>s+mine(e),0))} · lent ${fmt(es.reduce((s,e)=>s+lent(e),0))}`;
+  const t=totals(es);$('#hTotal').textContent=`${es.length} entries · I spent ${fmt(t.all)} (៛${Math.round(t.khr).toLocaleString()} + $${t.usd.toFixed(2)}) · lent ${fmt(t.lent)}`;
   if(!es.length){$('#histList').innerHTML='<div class="card"><p class="hint">Nothing in this range. Pick other dates or add spending from the Add tab.</p></div>';return}
   let h='',last='';
   es.forEach(e=>{
@@ -126,7 +141,7 @@ function renderHist(){
 $('#histList').onclick=e=>{
   const id=e.target.dataset.del; if(!id)return;
   const x=S.entries.find(y=>y.id===id); if(!x||isLocked(x.date))return toast('🔒 That day is locked');
-  if(confirm('Delete this entry?')){S.entries=S.entries.filter(y=>y.id!==id);save()}
+  if(confirm('Delete this entry?')){S.entries=S.entries.filter(y=>y.id!==id);S.deleted[id]=Date.now();save()}
 };
 const setH=(f,t)=>{hCustom={from:f,to:t};renderHist()};
 $('#hFrom').onchange=$('#hTo').onchange=()=>setH($('#hFrom').value||'0000-01-01',$('#hTo').value||'9999-12-31');
@@ -146,31 +161,89 @@ function renderOwed(){
   if(!names.length){$('#owedList').innerHTML='<div class="card"><p class="hint">No one owes you anything yet. Use "Paid for someone" or "Split" when adding.</p></div>';return}
   $('#owedList').innerHTML=names.sort((a,c)=>b[c]-b[a]).map(n=>{
     const v=b[n];
-    return `<div class="card"><div class="person"><div><b>${esc(n)}</b><br><span class="${v>0.5?'gold':'jade'}">${v>0.5?'owes you '+fmt(v):'all settled'}</span></div>
-    <div class="row"><button class="btn ghost small" data-rec="${esc(n)}">Receipt</button>
-    ${v>0.5?`<button class="btn small" data-pay="${esc(n)}">Got paid</button>`:''}</div></div></div>`;
+    return `<div class="card tap" data-pay="${esc(n)}"><div class="person"><div><b>${esc(n)}</b><br>
+    <span class="${v>0.5?'gold':'jade'}">${v>0.5?'owes you '+fmt(v):'all settled ✓'}</span>${v>0.5?`<br><span class="tag">${alt(v)}</span>`:''}</div>
+    <div class="row"><button class="btn ghost small" data-rec="${esc(n)}">Receipt</button>${v>0.5?`<button class="btn small" data-pay="${esc(n)}">Got paid</button>`:''}</div></div></div>`;
   }).join('');
 }
 $('#owedList').onclick=e=>{
-  if(e.target.dataset.rec) return receipt(e.target.dataset.rec);
-  const n=e.target.dataset.pay; if(!n)return;
-  const full=balances()[n], d=S.settings.disp;
-  const def=d==='USD'?(full/rate()).toFixed(2):Math.round(full);
-  const v=parseFloat(prompt(`${n} paid you how much (${d==='USD'?'USD':'riel'})?`,def));
-  if(v>0){S.payments.push({id:uid(),date:today(),person:n,amt:v,cur:d});save();toast('Payment recorded ✓')}
+  const r=e.target.closest('[data-rec]'); if(r) return receipt(r.dataset.rec);
+  const p=e.target.closest('[data-pay]'); if(p) payPopup(p.dataset.pay);
 };
-function receipt(n){
+function payPopup(n){
+  const full=Math.max(balances()[n]||0,0); let cur=S.settings.disp;
+  const pays=S.payments.filter(p=>p.person===n).sort((a,b)=>b.date.localeCompare(a.date));
+  $('#sheet').className='sheet dark';
+  $('#sheet').innerHTML=`<h2>${esc(n)}</h2>
+  <p class="hint">${full>0.5?'Still owes you':'Nothing owed right now'}</p>
+  <div class="big">${fmt(full)}</div><p class="hint">${alt(full)}</p>
+  <div class="seg" id="pc"><button data-c="KHR">៛ Riel</button><button data-c="USD">$ USD</button></div>
+  <input id="pamt" type="number" inputmode="decimal" step="any" placeholder="How much did they pay?">
+  <p class="hint" id="pleft"></p>
+  <div class="btns">${full>0.5?'<button class="btn ghost" id="pfull">Paid in full</button>':''}<button class="btn" id="psave">Save payment</button></div>
+  ${pays.length?'<div class="day">Payments so far</div>'+pays.map(p=>`<div class="item"><div class="l"><span>${orig(p.amt,p.cur)}</span><span class="tag">${nice(p.date)}</span></div><div class="r"><button class="btn danger small" data-undo="${p.id}">Undo</button></div></div>`).join(''):''}
+  <div class="btns" style="margin-top:14px"><button class="btn ghost" id="pclose">Close</button></div>`;
+  $('#modal').hidden=false;
+  const upd=()=>{
+    $$('#pc button').forEach(b=>b.classList.toggle('on',b.dataset.c===cur));
+    const a=+$('#pamt').value||0, left=full-toKHR(a,cur);
+    $('#pleft').textContent=!a?'':left>0.5?`Remaining after this: ${fmt(left)} (${alt(left)})`:left<-0.5?`That is ${fmt(-left)} more than they owe`:'This settles everything ✓';
+  };
+  upd();
+  $('#pc').onclick=e=>{if(e.target.dataset.c){cur=e.target.dataset.c;upd()}};
+  $('#pamt').oninput=upd;
+  $('#pamt').addEventListener('wheel',e=>e.target.blur());
+  if(full>0.5)$('#pfull').onclick=()=>{$('#pamt').value=cur==='USD'?(full/rate()).toFixed(2):Math.round(full);upd()};
+  $('#psave').onclick=()=>{
+    const a=+$('#pamt').value; if(!(a>0))return toast('Enter how much they paid');
+    S.payments.push({id:uid(),date:today(),person:n,amt:a,cur});save();toast('Payment saved ✓');payPopup(n);
+  };
+  $('#pclose').onclick=()=>$('#modal').hidden=true;
+  $('#sheet').onclick=e=>{const id=e.target.dataset.undo;if(id&&confirm('Undo this payment?')){S.payments=S.payments.filter(p=>p.id!==id);S.deleted[id]=Date.now();save();payPopup(n)}};
+}
+
+/* ---------- receipts (print, save as PDF, or download) ---------- */
+const RCSS="body{font:15px system-ui,sans-serif;background:#fbf8f1;color:#221c14;margin:0}.sheet{max-width:520px;margin:auto;padding:22px}h2{margin:0 0 2px}table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.9rem}td,th{padding:7px 4px;border-bottom:1px dashed #c9bfa8;text-align:left}td:last-child,th:last-child{text-align:right}.line{display:flex;justify-content:space-between;padding:3px 0}.total{font-size:1.4rem;font-weight:800;display:flex;justify-content:space-between;margin:10px 0}.tag{color:#7a705c;font-size:.8rem}.qr{display:flex;gap:14px;align-items:center;margin-top:16px}.qr img{width:150px;border-radius:12px}";
+function showReceipt(inner,title,extra=''){
+  $('#sheet').className='sheet'; $('#sheet').onclick=null;
+  $('#sheet').innerHTML=inner+extra+'<div class="btns"><button class="btn" id="rPrint">Print / Save PDF</button><button class="btn ghost" id="rDl">Download</button><button class="btn ghost" id="rClose">Close</button></div>';
+  $('#modal').hidden=false;
+  $('#rPrint').onclick=()=>window.print();
+  $('#rClose').onclick=()=>$('#modal').hidden=true;
+  $('#rDl').onclick=()=>{
+    const doc=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${RCSS}</style></head><body><div class="sheet">${inner}</div></body></html>`;
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([doc],{type:'text/html'}));a.download=title.replace(/[^\w-]+/g,'_')+'.html';a.click();
+  };
+}
+function receipt(n,qid){
   const rows=[];
   S.entries.forEach(e=>{const v=owes(e)[n];if(v)rows.push({d:e.date,t:`${e.cat}${e.note?' · '+esc(e.note):''}${e.kind==='split'?' (split)':''}`,v})});
-  S.payments.filter(p=>p.person===n).forEach(p=>rows.push({d:p.date,t:'Payment received',v:-toKHR(p.amt,p.cur)}));
+  S.payments.filter(p=>p.person===n).forEach(p=>rows.push({d:p.date,t:`Payment received · ${orig(p.amt,p.cur)}`,v:-toKHR(p.amt,p.cur)}));
   rows.sort((a,b)=>a.d.localeCompare(b.d));
-  const total=rows.reduce((s,r)=>s+r.v,0);
-  $('#sheet').innerHTML=`<h2>Receipt for ${esc(n)}</h2><div class="tag">Printed ${nice(today())} · rate ៛${rate()} = $1</div>
+  const owed=rows.filter(r=>r.v>0).reduce((s,r)=>s+r.v,0), paid=-rows.filter(r=>r.v<0).reduce((s,r)=>s+r.v,0), left=owed-paid;
+  const q=qid==='none'?null:S.qrs.find(x=>x.id===(qid||S.settings.qrActive));
+  const qr=q&&left>0.5?`<div class="qr"><img src="${q.img}" alt="Payment QR"><div><b>Scan to pay</b><br>${esc(q.name)}<br>${esc(q.note||'')}<br><span class="tag">Type the amount when you pay</span></div></div>`:'';
+  const qcur=q?q.id:'none';
+  const chips=S.qrs.length&&left>0.5?`<div class="chips noprint" style="margin-top:12px">${S.qrs.map(x=>`<button class="chip ${x.id===qcur?'on':''}" data-qr="${x.id}">${esc(x.name)}</button>`).join('')}<button class="chip ${qcur==='none'?'on':''}" data-qr="none">No QR</button></div>`:'';
+  showReceipt(`<h2>Receipt for ${esc(n)}</h2><div class="tag">${nice(today())} · rate ៛${rate()} = $1</div>
   <table><tr><th>Date</th><th>Item</th><th>Amount</th></tr>${rows.map(r=>`<tr><td>${nice(r.d)}</td><td>${r.t}</td><td>${r.v<0?'−':''}${fmt(Math.abs(r.v))}</td></tr>`).join('')}</table>
-  <div class="total"><span>${total>0.5?'Still owed':'Balance'}</span><span>${fmt(Math.max(total,0))}</span></div>
-  <div class="btns"><button class="btn" onclick="window.print()">Print / Save PDF</button><button class="btn ghost" onclick="$('#modal').hidden=true">Close</button></div>`;
-  $('#modal').hidden=false;
+  <div class="line"><span>Total owed</span><span>${fmt(owed)}</span></div>
+  <div class="line"><span>Paid so far</span><span>− ${fmt(paid)}</span></div>
+  <div class="total"><span>${left>0.5?'Still owed':'All settled ✓'}</span><span>${fmt(Math.max(left,0))}</span></div>
+  ${left>0.5?`<div class="tag">${alt(left)}</div>`:''}${qr}`,'Receipt-'+n,chips);
+  $('#sheet').onclick=e=>{const id=e.target.dataset.qr;if(id)receipt(n,id)};
 }
+function spendReceipt(){
+  const r=hRange(), lab=x=>/^(0000|9999)/.test(x)?'…':nice(x);
+  const es=S.entries.filter(e=>inRange(e.date,r)).sort((a,b)=>a.date.localeCompare(b.date)), t=totals(es);
+  showReceipt(`<h2>My spending</h2><div class="tag">${lab(r.from)} → ${lab(r.to)} · rate ៛${rate()} = $1</div>
+  <table><tr><th>Date</th><th>Item</th><th>My share</th></tr>${es.map(e=>`<tr><td>${nice(e.date)}</td><td>${e.cat}${e.note?' · '+esc(e.note):''}${e.kind==='other'?' (paid for '+esc(e.people[0])+')':e.kind==='split'?' (split, total '+orig(e.amt,e.cur)+')':''}</td><td>${e.kind==='other'?'−':orig(mineN(e),e.cur)}</td></tr>`).join('')}</table>
+  <div class="line"><span>Spent in riel</span><span>៛${Math.round(t.khr).toLocaleString()}</span></div>
+  <div class="line"><span>Spent in USD</span><span>$${t.usd.toFixed(2)}</span></div>
+  <div class="line"><span>Lent to others</span><span>${fmt(t.lent)}</span></div>
+  <div class="total"><span>Total spent</span><span>${fmt(t.all)}</span></div>`,`Spending-${r.from}-to-${r.to}`);
+}
+$('#hRec').onclick=spendReceipt;
 $('#modal').onclick=e=>{if(e.target.id==='modal')e.target.hidden=true};
 
 /* ---------- charts ---------- */
@@ -190,7 +263,7 @@ function renderCharts(){
   if(typeof Chart==='undefined')return;
   Chart.defaults.color='#9a92b5';
   charts.b=new Chart($('#barChart'),{type:'bar',data:{labels:Object.keys(days).map(nice),datasets:[{label:'Per day',data:Object.values(days).map(conv),backgroundColor:'#f5b942',borderRadius:6}]},options:{plugins:{legend:{display:false}},scales:{y:{grid:{color:'#2f2947'}},x:{grid:{display:false}}}}});
-  const pal=['#f5b942','#3ddc97','#ff6b81','#7aa2ff','#c58bff','#ff9f5a','#5ee0e0','#b0a8c9'];
+  const pal=['#f5b942','#3ddc97','#ff6b81','#7aa2ff','#c58bff','#ff9f5a','#5ee0e0','#b0a8c9','#e6e76a'];
   charts.p=new Chart($('#pieChart'),{type:'doughnut',data:{labels:Object.keys(cats),datasets:[{data:Object.values(cats).map(conv),backgroundColor:pal,borderColor:'#1e1a2e'}]},options:{plugins:{legend:{position:'bottom'}}}});
 }
 
@@ -198,11 +271,12 @@ function renderCharts(){
 function renderSettings(){
   $$('#dispSeg button').forEach(b=>b.classList.toggle('on',b.dataset.c===S.settings.disp));
   if(document.activeElement.id!=='rate')$('#rate').value=S.settings.rate;
+  if(document.activeElement.id!=='parkRate')$('#parkRate').value=S.settings.parkRate;
   if(document.activeElement.id!=='cycleDay')$('#cycleDay').value=S.settings.cycleDay;
   if(document.activeElement.id!=='gToken')$('#gToken').value=sync.token||'';if(document.activeElement.id!=='gId')$('#gId').value=sync.id||'';
 }
 $('#dispSeg').onclick=e=>{const c=e.target.dataset.c;if(c){S.settings.disp=c;save()}};
-$('#saveSet').onclick=()=>{S.settings.rate=+$('#rate').value||4100;S.settings.cycleDay=Math.min(28,Math.max(1,+$('#cycleDay').value||1));cOff=0;save();toast('Settings saved ✓')};
+$('#saveSet').onclick=()=>{S.settings.parkRate=+$('#parkRate').value||500;S.settings.rate=+$('#rate').value||4100;S.settings.cycleDay=Math.min(28,Math.max(1,+$('#cycleDay').value||1));cOff=0;save();toast('Settings saved ✓')};
 /* ---------- day locks ---------- */
 let lOff=0;
 function renderLocks(){
@@ -248,38 +322,78 @@ $('#exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObje
 $('#impBtn').onclick=()=>{if(confirm('Importing replaces your current data. Continue?'))$('#imp').click()};
 $('#imp').onchange=async e=>{try{S=JSON.parse(await e.target.files[0].text());fix();save();toast('Imported ✓')}catch{toast('Invalid file')}};
 
-/* ---------- GitHub Gist sync ---------- */
+/* ---------- payment QRs (uploaded, saved, switchable) ---------- */
+function renderQrs(){
+  const act=S.settings.qrActive;
+  $('#qrList').innerHTML=S.qrs.length?S.qrs.map(q=>`<div class="qrcard ${q.id===act?'on':''}"><img src="${q.img}" alt=""><div class="l"><b>${esc(q.name)}</b><span class="tag">${esc(q.note||'')}</span></div><div class="r"><button class="btn small ${q.id===act?'':'ghost'}" data-use="${q.id}">${q.id===act?'In use ✓':'Use'}</button><button class="btn danger small" data-qdel="${q.id}">Delete</button></div></div>`).join(''):'<p class="hint">No QR yet. Upload one below and it shows on receipts.</p>';
+}
+$('#qrList').onclick=e=>{
+  const u=e.target.dataset.use, d=e.target.dataset.qdel;
+  if(u){S.settings.qrActive=u;save()}
+  if(d&&confirm('Delete this QR?')){S.qrs=S.qrs.filter(q=>q.id!==d);S.deleted[d]=Date.now();if(S.settings.qrActive===d)S.settings.qrActive=S.qrs[0]?S.qrs[0].id:null;save()}
+};
+$('#qrUp').onclick=()=>$('#qrFile').click();
+$('#qrFile').onchange=e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const im=new Image();
+  im.onload=()=>{
+    const k=Math.min(1,800/Math.max(im.width,im.height)), c=document.createElement('canvas');
+    c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);
+    const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);
+    const q={id:uid(),name:$('#qName').value.trim()||'QR '+(S.qrs.length+1),note:$('#qNote').value.trim(),img:c.toDataURL('image/jpeg',.88)};
+    S.qrs.push(q); if(!S.settings.qrActive)S.settings.qrActive=q.id;
+    $('#qName').value='';$('#qNote').value='';e.target.value='';save();toast('QR saved ✓');
+  };
+  im.onerror=()=>toast('Could not read that image');
+  im.src=URL.createObjectURL(f);
+};
+
+/* ---------- GitHub Gist sync: merges both devices, never overwrites ---------- */
 const dot=c=>$('#syncDot').className=c;
-let pushT;
-function queuePush(){if(sync.token&&sync.id){dot('busy');clearTimeout(pushT);pushT=setTimeout(push,1200)}}
-const gh=(path,opt={})=>fetch('https://api.github.com'+path,{...opt,headers:{Authorization:'token '+sync.token,Accept:'application/vnd.github+json'}});
-async function push(){
-  try{
-    const body={files:{'spending.json':{content:JSON.stringify(S)}}};
-    let r;
-    if(!sync.id){r=await gh('/gists',{method:'POST',body:JSON.stringify({description:'Spending tracker data',public:false,...body})});const j=await r.json();sync.id=j.id;localStorage.setItem(SYNC,JSON.stringify(sync))}
-    else r=await gh('/gists/'+sync.id,{method:'PATCH',body:JSON.stringify(body)});
-    if(!r.ok)throw 0; dot('ok'); $('#syncMsg').textContent='Synced '+new Date().toLocaleTimeString(); renderSettings();
-  }catch{dot('err');$('#syncMsg').textContent='Sync failed. Check your token and Gist ID.'}
+const msg=t=>$('#syncMsg').textContent=t;
+const gh=(path,opt={})=>fetch('https://api.github.com'+path,{cache:'no-store',...opt,headers:{Authorization:'token '+sync.token,Accept:'application/vnd.github+json','Content-Type':'application/json'}});
+function merge(a,b){
+  const del={...(a.deleted||{}),...(b.deleted||{})};
+  const union=(x,y)=>{const m={};[...(x||[]),...(y||[])].forEach(i=>{if(!del[i.id])m[i.id]=i});return Object.values(m)};
+  const newer=(a.updated||0)>=(b.updated||0)?a:b;
+  return {entries:union(a.entries,b.entries),payments:union(a.payments,b.payments),qrs:union(a.qrs,b.qrs),people:[...new Set([...(a.people||[]),...(b.people||[])])],deleted:del,settings:newer.settings,dayLocks:newer.dayLocks||{},updated:Math.max(a.updated||0,b.updated||0)};
 }
-async function pull(){
+const sig=x=>[(x.entries||[]).length,(x.payments||[]).length,(x.qrs||[]).length,(x.people||[]).length,x.updated||0].join();
+const errText=c=>c===401?'Token rejected. Make a new classic token with the gist scope.':c===404?'Gist not found. Check the Gist ID, and that the token is a classic one with the gist scope.':c===403?'GitHub refused the request (rate limit or missing gist scope).':'Could not reach GitHub.';
+let syncing=false, again=false, pushT;
+function queuePush(){if(sync.token){dot('busy');clearTimeout(pushT);pushT=setTimeout(syncNow,1200)}}
+async function syncNow(){
   if(!sync.token)return;
-  if(!sync.id)return push();
-  dot('busy');
+  if(syncing){again=true;return}
+  syncing=true;dot('busy');
   try{
-    const r=await gh('/gists/'+sync.id);if(!r.ok)throw 0;
-    const j=await r.json(), f=j.files['spending.json'];
-    const txt=f.truncated?await (await fetch(f.raw_url)).text():f.content;
-    const remote=JSON.parse(txt);
-    if(remote.updated>S.updated){S=remote;fix();localStorage.setItem(KEY,JSON.stringify(S));render()}
-    else if(remote.updated<S.updated) await push();
-    dot('ok');
-  }catch{dot('err')}
+    let remote=null;
+    if(sync.id){
+      const r=await gh('/gists/'+sync.id+'?t='+Date.now());
+      if(!r.ok)throw r.status;
+      const f=(await r.json()).files['spending.json'];
+      if(f)remote=JSON.parse(f.truncated?await(await fetch(f.raw_url,{cache:'no-store'})).text():f.content);
+    }
+    const m=remote?merge(S,remote):S;
+    if(remote&&sig(m)!==sig(S)){S=m;fix();localStorage.setItem(KEY,JSON.stringify(S));render()}
+    if(!remote||sig(m)!==sig(remote)){
+      const body={files:{'spending.json':{content:JSON.stringify(S)}}};
+      const r=sync.id?await gh('/gists/'+sync.id,{method:'PATCH',body:JSON.stringify(body)}):await gh('/gists',{method:'POST',body:JSON.stringify({description:'Spending tracker data',public:false,...body})});
+      if(!r.ok)throw r.status;
+      if(!sync.id){sync.id=(await r.json()).id;localStorage.setItem(SYNC,JSON.stringify(sync));renderSettings()}
+    }
+    dot('ok');msg(`Synced ${new Date().toLocaleTimeString()} · ${S.entries.length} entries · Gist ${sync.id.slice(0,7)}…`);
+  }catch(c){dot('err');msg(errText(c))}
+  syncing=false; if(again){again=false;syncNow()}
 }
-$('#saveSync').onclick=()=>{sync={token:$('#gToken').value.trim(),id:$('#gId').value.trim()};localStorage.setItem(SYNC,JSON.stringify(sync));pull().then(()=>toast('Sync saved'))};
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)pull()});
+$('#saveSync').onclick=()=>{sync={token:$('#gToken').value.trim(),id:$('#gId').value.trim()};localStorage.setItem(SYNC,JSON.stringify(sync));syncNow()};
+$('#syncNowBtn').onclick=()=>syncNow();
+$('#copyGist').onclick=()=>{if(sync.id){navigator.clipboard&&navigator.clipboard.writeText(sync.id);toast('Gist ID copied')}};
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncNow()});
+addEventListener('focus',()=>syncNow()); addEventListener('online',()=>syncNow());
+setInterval(()=>{if(!document.hidden)syncNow()},30000);
 
 $$('input[type=number]').forEach(i=>i.addEventListener('wheel',()=>i.blur()));
-render(); pull();
+render(); syncNow();
 /* re-check locks every minute so days lock themselves at 1 AM */
 setInterval(()=>{$('#date').max=today();renderForm();renderHist();renderLocks()},60000);
