@@ -7,7 +7,7 @@
 <title>Kaksa · Spending Tracker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 <header>
@@ -137,6 +137,11 @@
       <div class="row"><button class="btn ghost" id="exp">Export JSON</button><button class="btn ghost" id="impBtn">Import JSON</button></div>
       <input type="file" id="imp" accept=".json" hidden>
     </div>
+    <div class="card">
+      <h3>App update</h3>
+      <p class="hint">Phone showing an old version? This loads the newest version of the app. Your spending data stays safe.</p>
+      <button class="btn" id="hardRefresh">Hard refresh</button>
+    </div>
   </section>
 </main>
 
@@ -152,6 +157,6 @@
 <div id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
