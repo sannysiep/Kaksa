@@ -7,7 +7,7 @@
 <title>Kaksa · Spending Tracker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 <header>
@@ -20,10 +20,11 @@
   <section id="tab-add" class="tab on">
     <div class="cycle">
       <button class="icon" id="prevC">‹</button>
-      <div class="stats">
-        <div><small>I spent</small><b id="sMine"></b></div>
-        <div><small>Lent out</small><b id="sLent"></b></div>
-        <div><small>Still owed to me</small><b id="sOwed" class="gold"></b></div>
+      <div class="hero">
+        <small>I spent · total in <span id="dispName"></span></small>
+        <b id="sTotal"></b>
+        <div class="split"><span id="sKHR"></span><span id="sUSD"></span></div>
+        <div class="mini"><div><small>Lent out</small><b id="sLent"></b></div><div><small>Still owed to me</small><b id="sOwed" class="gold"></b></div></div>
       </div>
       <button class="icon" id="nextC">›</button>
     </div>
@@ -34,7 +35,13 @@
         <button data-k="other">Paid for someone</button>
         <button data-k="split">Split</button>
       </div>
-      <div class="row">
+      <div id="parkRow" class="park" hidden>
+        <button class="icon" id="pMinus">−</button>
+        <div class="pc"><input id="pTimes" type="number" inputmode="numeric" min="1" value="1"><small>times parked</small></div>
+        <button class="icon" id="pPlus">+</button>
+        <div class="pt" id="pTotal"></div>
+      </div>
+      <div class="row" id="amtRow">
         <input id="amt" type="number" inputmode="decimal" placeholder="Amount" step="any">
         <div class="seg small" id="cur"><button data-c="KHR" class="on">៛ Riel</button><button data-c="USD">$ USD</button></div>
       </div>
@@ -59,6 +66,7 @@
       <div class="row"><input type="date" id="hFrom"><input type="date" id="hTo"></div>
       <div class="row"><button class="btn ghost small" id="hCycle">Whole cycle</button><button class="btn ghost small" id="hWeek">Last 7 days</button><button class="btn ghost small" id="hAll">All</button></div>
       <p class="hint" id="hTotal"></p>
+      <button class="btn" id="hRec">Receipt for these dates</button>
     </div>
     <div id="histList"></div>
   </section>
@@ -96,10 +104,22 @@
       <div class="seg small" id="dispSeg"><button data-c="KHR">៛ Riel</button><button data-c="USD">$ USD</button></div>
       <label>Exchange rate (៛ per $1)</label>
       <input id="rate" type="number">
+      <label>Parking price (៛ per time)</label>
+      <input id="parkRate" type="number">
       <label>Cycle starts on day</label>
       <input id="cycleDay" type="number" min="1" max="28">
       <p class="hint">15 means 15th → 14th of next month, like your rent.</p>
       <button class="btn" id="saveSet">Save settings</button>
+    </div>
+    <div class="card">
+      <h3>Payment QR for receipts</h3>
+      <div id="qrList"></div>
+      <label>Add a new QR</label>
+      <input id="qName" placeholder="Label, e.g. ABA or ACLEDA">
+      <input id="qNote" placeholder="Text under the QR, e.g. account numbers (optional)">
+      <button class="btn" id="qrUp">Upload QR image</button>
+      <input type="file" id="qrFile" accept="image/*" hidden>
+      <p class="hint">Tip: crop the picture so the QR fills it. QRs are saved in your sync Gist, so they appear on your phone too. On a receipt you can switch between them.</p>
     </div>
     <div class="card">
       <h3>Sync across phone and PC</h3>
@@ -109,6 +129,7 @@
       <label>Gist ID</label>
       <input id="gId" placeholder="Leave empty to create a new one">
       <button class="btn" id="saveSync">Save and sync now</button>
+      <div class="row"><button class="btn ghost" id="syncNowBtn">Sync now</button><button class="btn ghost" id="copyGist">Copy Gist ID</button></div>
       <p class="hint" id="syncMsg"></p>
     </div>
     <div class="card">
@@ -131,6 +152,6 @@
 <div id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
