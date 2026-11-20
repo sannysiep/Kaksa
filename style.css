@@ -77,3 +77,33 @@ nav{background:rgba(26,22,40,.82);backdrop-filter:blur(14px);-webkit-backdrop-fi
 /* v3: no number spinners */
 input[type=number]{-moz-appearance:textfield;appearance:textfield}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+
+/* v4: hero totals, pay popup, receipts */
+.hero{flex:1;display:flex;flex-direction:column;gap:8px;text-align:center}
+.hero>b{font-size:2.1rem;letter-spacing:-.02em;line-height:1}
+.split{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.split span{background:#16122a;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-weight:600;font-size:.9rem}
+.mini{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}.mini b{display:block;margin-top:2px}
+.tap{cursor:pointer}
+.big{font-size:2rem;font-weight:800;color:var(--gold)}
+.sheet.dark{background:var(--card);color:var(--tx);display:flex;flex-direction:column;gap:12px}
+.sheet.dark .btn.ghost{color:var(--tx);border-color:var(--line)}
+.sheet .btns .btn{flex:1}
+.sheet .line{display:flex;justify-content:space-between;padding:3px 0}
+.sheet .qr{display:flex;gap:14px;align-items:center;margin-top:16px;font-size:.9rem}
+.sheet .qr img{width:150px;border-radius:12px}
+.sheet .tag{color:#7a705c}.sheet.dark .tag{color:var(--mut)}
+
+/* v5: parking, QR manager */
+[hidden]{display:none!important}
+.park{display:flex;align-items:center;gap:10px}
+.pc{display:flex;flex-direction:column;align-items:center;gap:2px}
+.pc input{width:84px;text-align:center;font-size:1.4rem;font-weight:800;padding:8px}
+.pt{margin-left:auto;font-weight:800;color:var(--gold);text-align:right}
+.qrcard{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:10px;margin-bottom:8px}
+.qrcard.on{border-color:var(--jade)}
+.qrcard img{width:64px;height:64px;object-fit:cover;border-radius:8px;background:#fff}
+.qrcard .l{flex:1;display:flex;flex-direction:column;gap:3px}
+.qrcard .r{display:flex;flex-direction:column;gap:6px}
+.sheet .chip{color:#221c14;border-color:#c9bfa8}.sheet .chip.on{color:#06251a;border-color:var(--jade)}.sheet.dark .chip{color:var(--tx);border-color:var(--line)}.sheet.dark .chip.on{color:#06251a}
+@media print{.noprint{display:none!important}}
