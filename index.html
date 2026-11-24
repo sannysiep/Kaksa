@@ -7,7 +7,7 @@
 <title>Kaksa · Spending Tracker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
@@ -83,8 +83,15 @@
       <div class="row"><button class="btn ghost" id="cCycle">This cycle</button><button class="btn ghost" id="cMonth">This month</button></div>
       <p class="hint" id="cTotal"></p>
       <canvas id="barChart" height="220"></canvas>
+      <p class="hint" style="text-align:center">Tap a day to see what you spent on it</p>
     </div>
-    <div class="card"><canvas id="pieChart" height="240"></canvas></div>
+    <div class="card" id="bdCard">
+      <div class="bdhead"><small id="bdScope"></small><b id="bdTitle"></b></div>
+      <div class="crumbs" id="bdCrumbs"></div>
+      <div class="donut" id="donut"><canvas id="pieChart" height="240"></canvas><div class="dcenter"><b id="dcTotal"></b><small id="dcLab"></small></div></div>
+      <div id="bdRows"></div>
+    </div>
+    <div class="card"><h3 id="listTitle"></h3><div id="chList"></div></div>
   </section>
 
   <!-- SETTINGS -->
@@ -102,7 +109,10 @@
       <h3>General</h3>
       <label>Show totals in</label>
       <div class="seg small" id="dispSeg"><button data-c="KHR">៛ Riel</button><button data-c="USD">$ USD</button></div>
-      <label>Exchange rate (៛ per $1)</label>
+      <label>Exchange rate</label>
+      <div class="seg small" id="rateMode"><button data-m="live">⚡ Live</button><button data-m="manual">Manual</button></div>
+      <div class="row"><p class="hint" id="liveMsg" style="flex:1"></p><button class="btn ghost small" id="liveNow" style="flex:0 0 auto">Refresh</button></div>
+      <label>Manual rate (៛ per $1) · used when Live is off or offline</label>
       <input id="rate" type="number">
       <label>Parking price (៛ per time)</label>
       <input id="parkRate" type="number">
@@ -157,6 +167,6 @@
 <div id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="app.js?v=6"></script>
+<script src="app.js"></script>
 </body>
 </html>
