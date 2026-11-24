@@ -20,8 +20,8 @@
   <section id="tab-add" class="tab on">
     <div class="cycle">
       <button class="icon" id="prevC">‹</button>
-      <div class="hero">
-        <small>I spent · total in <span id="dispName"></span></small>
+      <div class="hero" id="hero">
+        <small id="heroLab"></small>
         <b id="sTotal"></b>
         <div class="split"><span id="sKHR"></span><span id="sUSD"></span></div>
         <div class="mini"><div><small>Lent out</small><b id="sLent"></b></div><div><small>Still owed to me</small><b id="sOwed" class="gold"></b></div></div>
@@ -94,8 +94,57 @@
     <div class="card"><h3 id="listTitle"></h3><div id="chList"></div></div>
   </section>
 
+  <!-- BILLS -->
+  <section id="tab-bills" class="tab">
+    <div class="card">
+      <div class="cycle" style="margin:0">
+        <button class="icon" id="bPrev">‹</button>
+        <div class="hero"><small>Electricity + water</small><b id="bTotal" style="font-size:1.9rem"></b><small id="bSub"></small></div>
+        <button class="icon" id="bNext">›</button>
+      </div>
+      <label>Counting starts on <span class="hint">(double-check this date)</span></label>
+      <div class="row"><input type="date" id="bStart"><button class="btn ghost small" id="bStartReset" style="flex:0 0 auto">Reset</button></div>
+      <p class="hint" id="bRange"></p>
+    </div>
+    <div class="card">
+      <h3>Add a meter reading</h3>
+      <div class="seg" id="bType"><button data-t="elec" class="on">⚡ Electricity</button><button data-t="water">💧 Water</button></div>
+      <div class="row"><input type="date" id="bDate"><input id="bVal" type="number" inputmode="decimal" step="any" placeholder="Meter reading"></div>
+      <p class="hint" id="bHint"></p>
+      <button class="btn" id="bSave">Save reading</button>
+    </div>
+    <div id="bElec"></div>
+    <div id="bWater"></div>
+    <div class="card">
+      <h3>Prices and budget</h3>
+      <label>Electricity price (៛ per kWh)</label>
+      <input id="pElec" type="number" inputmode="decimal" step="any">
+      <label>Water price (៛ per m³)</label>
+      <input id="pWater" type="number" inputmode="decimal" step="any">
+      <label>Electricity budget for one bill period (៛, optional)</label>
+      <input id="bElecBud" type="number" inputmode="decimal" step="any">
+      <label>Water budget for one bill period (៛, optional)</label>
+      <input id="bWaterBud" type="number" inputmode="decimal" step="any">
+      <p class="hint">Use the price your landlord or the utility charges you. The budget is what you want one bill to stay under. It gives you a clear "okay or too much" answer.</p>
+      <button class="btn" id="bSaveP">Save prices</button>
+    </div>
+  </section>
+
   <!-- SETTINGS -->
   <section id="tab-set" class="tab">
+    <div class="card">
+      <h3>Exchange rate</h3>
+      <div class="ratebig"><b id="rateBig"></b><small id="rateSub"></small></div>
+      <div class="seg small" id="rateMode"><button data-m="live">⚡ Live</button><button data-m="manual">Manual</button></div>
+      <div class="row"><p class="hint" id="liveMsg" style="flex:1"></p><button class="btn ghost small" id="liveNow" style="flex:0 0 auto">Refresh</button></div>
+      <div id="manualBox">
+        <label>Manual rate (៛ per $1)</label>
+        <input id="rate" type="number" inputmode="decimal">
+      </div>
+      <div class="seg" id="rhSeg"><button data-r="7">7 days</button><button data-r="cycle">This cycle</button><button data-r="30">30 days</button></div>
+      <canvas id="rateChart" height="190"></canvas>
+      <p class="hint" id="rhMsg"></p>
+    </div>
     <div class="card">
       <h3>Day locks</h3>
       <p class="hint" id="lockMode"></p>
@@ -109,11 +158,9 @@
       <h3>General</h3>
       <label>Show totals in</label>
       <div class="seg small" id="dispSeg"><button data-c="KHR">៛ Riel</button><button data-c="USD">$ USD</button></div>
-      <label>Exchange rate</label>
-      <div class="seg small" id="rateMode"><button data-m="live">⚡ Live</button><button data-m="manual">Manual</button></div>
-      <div class="row"><p class="hint" id="liveMsg" style="flex:1"></p><button class="btn ghost small" id="liveNow" style="flex:0 0 auto">Refresh</button></div>
-      <label>Manual rate (៛ per $1) · used when Live is off or offline</label>
-      <input id="rate" type="number">
+      <label>Home screen total</label>
+      <div class="seg" id="heroSeg"><button data-h="comb">Combined total</button><button data-h="sep">Riel &amp; USD separate</button></div>
+      <p class="hint">"Separate" hides the combined total on the home screen and shows only your riel and your dollars, not mixed together.</p>
       <label>Parking price (៛ per time)</label>
       <input id="parkRate" type="number">
       <label>Cycle starts on day</label>
@@ -160,6 +207,7 @@
   <button data-t="hist">🧾<span>History</span></button>
   <button data-t="owed">🤝<span>Owed</span></button>
   <button data-t="chart">📊<span>Charts</span></button>
+  <button data-t="bills">💡<span>Bills</span></button>
   <button data-t="set">⚙️<span>Settings</span></button>
 </nav>
 
@@ -168,5 +216,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="app.js"></script>
+<script src="bills.js"></script>
 </body>
 </html>
