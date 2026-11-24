@@ -140,3 +140,32 @@ button.bd:active{transform:scale(.985)}
 .bd .nm small{display:inline;margin-left:4px}
 .bd .am{font-weight:800}
 .bd .pc{color:var(--mut);font-size:.8rem;min-width:36px;text-align:right}
+
+/* v8: rate card, separate totals, bills */
+.ratebig b{display:block;font-size:2.1rem;letter-spacing:-.02em;color:var(--gold)}
+.hero.sep .split{flex-direction:column;align-items:center;gap:10px}
+.hero.sep .split span{font-size:1.6rem;padding:12px 26px}
+nav button{min-width:0}
+.bcard{border-top:3px solid var(--c)}
+.bhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.vchip{padding:6px 12px;border-radius:999px;font-size:.8rem;font-weight:700;border:1px solid var(--line);color:var(--mut);white-space:nowrap}
+.vchip.good{color:var(--jade);border-color:var(--jade);background:rgba(61,220,151,.1)}
+.vchip.warn{color:var(--gold);border-color:var(--gold);background:rgba(245,185,66,.1)}
+.vchip.bad{color:var(--rose);border-color:var(--rose);background:rgba(255,107,129,.1)}
+.bbig b{display:block;font-size:2.1rem;letter-spacing:-.02em;color:var(--c);line-height:1.1}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{background:#16122a;border:1px solid var(--line);border-radius:14px;padding:11px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile b{font-size:1.05rem}
+.tile .up{color:var(--rose)}.tile .down{color:var(--jade)}
+.pbar{height:10px;border-radius:999px;background:#16122a;overflow:hidden}
+.pbar i{display:block;height:100%;border-radius:999px;background:var(--jade)}
+.pbar.warn i{background:var(--gold)}.pbar.bad i{background:var(--rose)}
+.insights{display:flex;flex-direction:column;gap:7px;font-size:.88rem;line-height:1.45}
+.insights div{padding-left:2px}
+.bcard details summary{cursor:pointer;font-weight:600;padding:6px 0}
+.btab{width:100%;border-collapse:collapse;font-size:.82rem;margin-top:6px}
+.btab th,.btab td{padding:7px 4px;border-bottom:1px solid var(--line);text-align:right}
+.btab th:first-child,.btab td:first-child{text-align:left}
+.btab th{color:var(--mut);font-weight:600;font-size:.74rem}
+.btab tr.est td{color:var(--mut);font-style:italic}
+.btab tr.spike td{color:var(--rose)}
