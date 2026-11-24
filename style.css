@@ -169,3 +169,20 @@ nav button{min-width:0}
 .btab th{color:var(--mut);font-weight:600;font-size:.74rem}
 .btab tr.est td{color:var(--mut);font-style:italic}
 .btab tr.spike td{color:var(--rose)}
+
+/* v9: dashboard look, one-row separate totals */
+.cycle .hero{background:linear-gradient(160deg,rgba(245,185,66,.10),rgba(122,162,255,.06) 60%,transparent),var(--card);border:1px solid var(--line);border-radius:22px;padding:16px 12px}
+.hero.sep .split{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%}
+.hero.sep .split span{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;white-space:nowrap;padding:14px 6px;border-radius:18px;font-weight:800;font-size:clamp(.95rem,4.6vw,1.4rem);letter-spacing:-.01em;background:linear-gradient(160deg,rgba(245,185,66,.16),transparent 70%),#16122a}
+.hero.sep #sUSD{background:linear-gradient(160deg,rgba(122,162,255,.18),transparent 70%),#16122a}
+.hero.sep .split span::before{font-size:.66rem;font-weight:700;letter-spacing:.14em;color:var(--mut)}
+.hero.sep #sKHR::before{content:'RIEL'}
+.hero.sep #sUSD::before{content:'USD'}
+.dashhead{display:flex;flex-direction:column;margin:4px 2px 12px}
+.dashhead h2{font-size:1.5rem;font-weight:800;letter-spacing:-.02em}
+.sec{margin:22px 2px 10px;font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);display:flex;align-items:center;gap:10px}
+.sec::after{content:'';flex:1;height:1px;background:var(--line)}
+.ctitle{display:flex;flex-direction:column;gap:2px}
+.ctitle b{font-size:1.02rem}
+.kpi b{font-size:1.12rem;overflow-wrap:anywhere}
+#kpis{margin-bottom:14px}
