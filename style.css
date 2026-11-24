@@ -119,3 +119,24 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 #upd span{flex:1;font-size:.9rem}
 #upd .btn{padding:9px 14px;font-size:.85rem;white-space:nowrap}
 #upd .btn.ghost{flex:0 0 auto}
+
+/* v7: chart drill-down */
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}
+.bdhead small{display:block}
+.bdhead b{font-size:1.3rem;letter-spacing:-.01em}
+.crumbs{display:flex;flex-wrap:wrap;gap:8px}
+.crumbs:empty{display:none}
+.crumb{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;border:1px solid var(--gold);background:rgba(245,185,66,.12);color:var(--gold);font:inherit;font-size:.85rem;font-weight:600;cursor:pointer}
+.crumb::after{content:'✕';font-size:.7rem;opacity:.8}
+.donut{position:relative;width:100%;max-width:300px;margin:0 auto}
+.dcenter{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none;padding:0 28%}
+.dcenter b{font-size:1.25rem;letter-spacing:-.02em}
+.bd{position:relative;display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:10px;width:100%;padding:13px 12px;margin-bottom:8px;border-radius:14px;border:1px solid var(--line);background:#16122a;color:var(--tx);font:inherit;text-align:left;overflow:hidden}
+button.bd{cursor:pointer;transition:transform .12s,border-color .12s}
+button.bd:hover{border-color:var(--gold)}
+button.bd:active{transform:scale(.985)}
+.bd .fill{position:absolute;left:0;top:0;bottom:0;opacity:.18}
+.bd>:not(.fill){position:relative}
+.bd .nm small{display:inline;margin-left:4px}
+.bd .am{font-weight:800}
+.bd .pc{color:var(--mut);font-size:.8rem;min-width:36px;text-align:right}
