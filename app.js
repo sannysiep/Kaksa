@@ -305,6 +305,32 @@ function renderCharts(still){
   const dayKeys=Object.keys(days);
   $('#cTotal').textContent=`My spending in this range: ${fmt(Object.values(days).reduce((a,b)=>a+b,0))}`;
 
+  /* overview numbers + trend maths */
+  const addD=(d,n)=>{const x=new Date(d+'T00:00');x.setDate(x.getDate()+n);return ymd(x)};
+  const N=dayKeys.length, td=today(), idxT=dayKeys.filter(d=>d<=td).length-1, elapsed=idxT+1;
+  const dayVals=dayKeys.map(d=>days[d]);
+  const total=dayVals.slice(0,elapsed).reduce((a,b)=>a+b,0), avgD=elapsed?total/elapsed:0;
+  const pFrom=addD(r.from,-N), pd={};
+  S.entries.filter(e=>inRange(e.date,{from:pFrom,to:addD(r.from,-1)})&&mine(e)>0).forEach(e=>{pd[e.date]=(pd[e.date]||0)+mine(e)});
+  const prevVals=dayKeys.map((_,i)=>pd[addD(pFrom,i)]||0);
+  const prevTo=prevVals.slice(0,elapsed).reduce((a,b)=>a+b,0);
+  const delta=prevTo>0?(total/prevTo-1)*100:null;
+  const projected=elapsed&&N>elapsed?avgD*N:total;
+  const cs={};spent.forEach(e=>{cs[e.cat]=(cs[e.cat]||0)+mine(e)});
+  const csT=Object.values(cs).reduce((a,b)=>a+b,0), topC=Object.entries(cs).sort((a,b)=>b[1]-a[1])[0];
+  const topD=dayKeys.reduce((a,d)=>days[d]>(days[a]||0)?d:a,dayKeys[0]);
+  $('#kpis').innerHTML=`
+    <div class="tile kpi"><small>Total spent</small><b>${fmt(total)}</b><span class="tag">${elapsed} of ${N} days</span></div>
+    <div class="tile kpi"><small>Daily average</small><b>${fmt(avgD)}</b><span class="tag">${fmt(avgD*30)} per 30 days</span></div>
+    <div class="tile kpi"><small>Projected total</small><b>${fmt(projected)}</b><span class="tag">${N>elapsed?'by '+nice(r.to):'range complete'}</span></div>
+    <div class="tile kpi"><small>vs previous ${N} days</small><b class="${delta===null?'':delta>0?'up':'down'}">${delta===null?'—':(delta>0?'▲ +':'▼ −')+Math.abs(delta).toFixed(0)+'%'}</b><span class="tag">${prevTo?fmt(prevTo)+' before':'no earlier data'}</span></div>
+    <div class="tile kpi"><small>Top category</small><b>${topC?esc(topC[0]):'—'}</b><span class="tag">${topC&&csT?Math.round(topC[1]/csT*100)+'% · '+fmt(topC[1]):' '}</span></div>
+    <div class="tile kpi"><small>Biggest day</small><b>${topD&&days[topD]>0?nice(topD):'—'}</b><span class="tag">${topD&&days[topD]>0?fmt(days[topD]):' '}</span></div>`;
+  const wsum=Array(7).fill(0), wcnt=Array(7).fill(0), WD=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  dayKeys.forEach((d,i)=>{if(i>idxT)return;const w=(new Date(d+'T00:00').getDay()+6)%7;wsum[w]+=days[d];wcnt[w]++});
+  const wavgK=wsum.map((s,i)=>wcnt[i]?s/wcnt[i]:0), wTop=wavgK.indexOf(Math.max(...wavgK));
+  $('#wkNote').textContent=Math.max(...wavgK)>0?`You spend the most on ${['Mondays','Tuesdays','Wednesdays','Thursdays','Fridays','Saturdays','Sundays'][wTop]} (about ${fmt(wavgK[wTop])} a day)`:'Average spend for each day of the week';
+
   /* breakdown: categories, or (after tapping a category) the things you used in it */
   const groups={};
   spent.filter(e=>(!chDay||e.date===chDay)&&(!chCat||e.cat===chCat)).forEach(e=>{
@@ -360,6 +386,29 @@ function renderCharts(still){
     data:{labels:rows.map(g=>g.name),datasets:[{data:rows.map(g=>conv(g.v)),backgroundColor:rows.map(g=>g.col),borderColor:'#1e1a2e',borderWidth:3,hoverOffset:6}]},
     options:{cutout:'68%',animation,plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>`${i.label}: ${tip(i.raw)}`}}},
       onClick:(ev,_,ch)=>{if(chCat)return;const p=ch.getElementsAtEventForMode(ev,'nearest',{intersect:true},true);if(p.length){chCat=rows[p[0].index].name;renderCharts(true)}}}});
+
+  /* spending trend: daily dots, 7-day average, running total, forecast, previous period */
+  const MA=dayVals.map((_,i)=>{if(i>idxT)return null;const sl=dayVals.slice(Math.max(0,i-6),i+1);return conv(sl.reduce((a,b)=>a+b,0)/sl.length)});
+  let run=0,prun=0;
+  const cum=dayVals.map((v,i)=>{if(i>idxT)return null;run+=v;return conv(run)});
+  const pcum=prevVals.map(v=>{prun+=v;return conv(prun)});
+  const fc=dayVals.map((_,i)=>idxT>=0&&N>elapsed&&i>=idxT?conv(total+avgD*(i-idxT)):null);
+  charts.t=new Chart($('#trendChart'),{type:'line',
+    data:{labels:dayKeys.map(nice),datasets:[
+      {label:'Daily spend',data:dayVals.map((v,i)=>i<=idxT?conv(v):null),yAxisID:'y',borderColor:'rgba(245,185,66,.4)',backgroundColor:'#f5b942',borderWidth:1.5,pointRadius:2.5,order:4},
+      {label:'7-day average',data:MA,yAxisID:'y',borderColor:'#f5b942',borderWidth:3,pointRadius:0,tension:.35,order:3},
+      {label:'Running total',data:cum,yAxisID:'y1',borderColor:'#3ddc97',backgroundColor:'rgba(61,220,151,.12)',fill:true,borderWidth:2.5,pointRadius:0,tension:.2,order:2},
+      {label:'Forecast',data:fc,yAxisID:'y1',borderColor:'#3ddc97',borderDash:[6,5],borderWidth:2,pointRadius:0,order:1},
+      {label:'Previous period',data:pcum,yAxisID:'y1',borderColor:'#9a92b5',borderDash:[2,4],borderWidth:1.5,pointRadius:0,order:5}]},
+    options:{animation,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{position:'bottom',labels:{boxWidth:12,usePointStyle:true}},tooltip:{filter:i=>i.raw!==null,callbacks:{label:i=>`${i.dataset.label}: ${tip(i.raw)}`}}},
+      scales:{y:{position:'left',beginAtZero:true,grid:{color:'#2f2947'},title:{display:true,text:'per day'}},
+              y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false},title:{display:true,text:'running total'}},
+              x:{grid:{display:false},ticks:{maxRotation:0,autoSkip:true}}}}});
+  const wv=wavgK.map(conv), wm=Math.max(...wv);
+  charts.w=new Chart($('#wkChart'),{type:'bar',
+    data:{labels:WD,datasets:[{data:wv,backgroundColor:wv.map(v=>v===wm&&v>0?'#f5b942':'#f5b94255'),borderRadius:8}]},
+    options:{animation,plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>'Average: '+tip(i.raw)}}},scales:{y:{beginAtZero:true,grid:{color:'#2f2947'}},x:{grid:{display:false}}}}});
 }
 
 /* ---------- settings / lock / tabs ---------- */
@@ -418,9 +467,8 @@ $('nav').onclick=e=>{
   const b=e.target.closest('button');if(!b)return;
   $$('nav button').forEach(x=>x.classList.toggle('on',x===b));
   $$('.tab').forEach(t=>t.classList.toggle('on',t.id==='tab-'+b.dataset.t));
-  if(b.dataset.t==='chart')renderCharts();
+  if(b.dataset.t==='chart'){renderCharts();renderRateChart()}
   if(b.dataset.t==='bills'&&typeof renderBills==='function')renderBills();
-  if(b.dataset.t==='set')renderRateChart();
 };
 $('#exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,2)],{type:'application/json'}));a.download=`spending-backup-${today()}.json`;a.click()};
 $('#impBtn').onclick=()=>{if(confirm('Importing replaces your current data. Continue?'))$('#imp').click()};
@@ -582,7 +630,7 @@ function rhDays(){
   return out;
 }
 async function renderRateChart(){
-  if(!$('#tab-set').classList.contains('on'))return;
+  if(!$('#tab-chart').classList.contains('on'))return;
   if(rhBusy){rhAgain=true;return}
   rhBusy=true;
   try{
