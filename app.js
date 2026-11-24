@@ -11,7 +11,7 @@ const today=()=>ymd(new Date());
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
 let S=JSON.parse(localStorage.getItem(KEY)||'null')||{entries:[],payments:[],people:[],settings:{rate:4100,cycleDay:15,disp:'KHR',lockedBefore:null},dayLocks:{},qrs:[],updated:0};
-function fix(){S.dayLocks=S.dayLocks||{};S.deleted=S.deleted||{};S.qrs=S.qrs||[];S.settings=Object.assign({rate:4100,cycleDay:15,disp:'KHR',lockedBefore:null,parkRate:500,qrActive:null,live:true},S.settings||{})}
+function fix(){S.dayLocks=S.dayLocks||{};S.deleted=S.deleted||{};S.qrs=S.qrs||[];S.settings=Object.assign({rate:4100,cycleDay:15,disp:'KHR',lockedBefore:null,parkRate:500,qrActive:null,live:true,sep:false},S.settings||{});S.readings=S.readings||[];S.bill=Object.assign({elecPrice:0,waterPrice:0,elecBudget:0,waterBudget:0},S.bill||{});S.bill.starts=Object.assign({'2026-11-15':'2026-11-18'},S.bill.starts||{})}
 fix();
 let sync=JSON.parse(localStorage.getItem(SYNC)||'{}');
 let form={kind:'me',cur:'KHR',cat:CATS[0],people:[]}, cOff=0, charts={};
@@ -64,13 +64,16 @@ function render(){
   const es=S.entries.filter(e=>inRange(e.date,r));
   const t=totals(es);
   $('#sTotal').textContent=fmt(t.all);
-  $('#dispName').textContent=S.settings.disp==='USD'?'USD':'riel';
+  $('#hero').classList.toggle('sep',!!S.settings.sep);
+  $('#sTotal').hidden=!!S.settings.sep;
+  $('#heroLab').textContent=S.settings.sep?'I spent · riel and USD kept separate':'I spent · total in '+(S.settings.disp==='USD'?'USD':'riel');
   $('#sKHR').textContent='៛ '+Math.round(t.khr).toLocaleString();
   $('#sUSD').textContent='$ '+t.usd.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
   $('#sLent').textContent=fmt(t.lent);
   $('#sOwed').textContent=fmt(Object.values(balances()).reduce((s,v)=>s+Math.max(v,0),0));
   renderForm(); renderHist(); renderOwed(); renderSettings(); renderLocks(); renderQrs();
   if($('#tab-chart').classList.contains('on')) renderCharts();
+  if($('#tab-bills').classList.contains('on')&&typeof renderBills==='function') renderBills();
 }
 
 /* ---------- add form ---------- */
@@ -361,6 +364,10 @@ function renderCharts(still){
 
 /* ---------- settings / lock / tabs ---------- */
 function renderSettings(){
+  $$('#heroSeg button').forEach(b=>b.classList.toggle('on',(b.dataset.h==='sep')===!!S.settings.sep));
+  $('#rateBig').textContent='$1 = ៛'+rate().toLocaleString(undefined,{maximumFractionDigits:2});
+  $('#rateSub').textContent=S.settings.live&&liveR.rate>0?'Live rate · updated '+new Date(liveR.at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'Manual rate (what the app is using now)';
+  $('#manualBox').hidden=!!S.settings.live;
   $$('#rateMode button').forEach(b=>b.classList.toggle('on',(b.dataset.m==='live')===!!S.settings.live));
   $('#liveNow').hidden=!S.settings.live;
   $('#liveMsg').textContent=S.settings.live?(liveR.rate?`⚡ Live: ៛${liveR.rate.toLocaleString(undefined,{maximumFractionDigits:2})} = $1 · updated ${new Date(liveR.at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}${liveFail?' (could not refresh, showing the last rate)':''}`:liveFail?'Could not reach the rate service. Using your manual rate for now.':'Getting the live rate…'):`Using your manual rate: ៛${(+S.settings.rate||4100).toLocaleString()} = $1`;
@@ -412,6 +419,8 @@ $('nav').onclick=e=>{
   $$('nav button').forEach(x=>x.classList.toggle('on',x===b));
   $$('.tab').forEach(t=>t.classList.toggle('on',t.id==='tab-'+b.dataset.t));
   if(b.dataset.t==='chart')renderCharts();
+  if(b.dataset.t==='bills'&&typeof renderBills==='function')renderBills();
+  if(b.dataset.t==='set')renderRateChart();
 };
 $('#exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,2)],{type:'application/json'}));a.download=`spending-backup-${today()}.json`;a.click()};
 $('#impBtn').onclick=()=>{if(confirm('Importing replaces your current data. Continue?'))$('#imp').click()};
@@ -451,9 +460,9 @@ function merge(a,b){
   const del={...(a.deleted||{}),...(b.deleted||{})};
   const union=(x,y)=>{const m={};[...(x||[]),...(y||[])].forEach(i=>{if(!del[i.id])m[i.id]=i});return Object.values(m)};
   const newer=(a.updated||0)>=(b.updated||0)?a:b;
-  return {entries:union(a.entries,b.entries),payments:union(a.payments,b.payments),qrs:union(a.qrs,b.qrs),people:[...new Set([...(a.people||[]),...(b.people||[])])],deleted:del,settings:newer.settings,dayLocks:newer.dayLocks||{},updated:Math.max(a.updated||0,b.updated||0)};
+  return {entries:union(a.entries,b.entries),payments:union(a.payments,b.payments),qrs:union(a.qrs,b.qrs),readings:union(a.readings,b.readings),bill:newer.bill||a.bill||b.bill||{},people:[...new Set([...(a.people||[]),...(b.people||[])])],deleted:del,settings:newer.settings,dayLocks:newer.dayLocks||{},updated:Math.max(a.updated||0,b.updated||0)};
 }
-const sig=x=>[(x.entries||[]).length,(x.payments||[]).length,(x.qrs||[]).length,(x.people||[]).length,x.updated||0].join();
+const sig=x=>[(x.entries||[]).length,(x.payments||[]).length,(x.qrs||[]).length,(x.readings||[]).length,(x.people||[]).length,x.updated||0].join();
 const errText=c=>c===401?'Token rejected. Make a new classic token with the gist scope.':c===404?'Gist not found. Check the Gist ID, and that the token is a classic one with the gist scope.':c===403?'GitHub refused the request (rate limit or missing gist scope).':'Could not reach GitHub.';
 let syncing=false, again=false, pushT;
 function queuePush(){if(sync.token){dot('busy');clearTimeout(pushT);pushT=setTimeout(syncNow,1200)}}
@@ -541,7 +550,7 @@ async function liveRate(force){
       if(v>1000&&v<10000){
         const changed=Math.abs(v-liveR.rate)>=0.005;
         liveR={rate:v,at:Date.now()}; liveFail=false; localStorage.setItem(LIVE,JSON.stringify(liveR));
-        changed?render():renderSettings(); return true;
+        changed?render():renderSettings(); renderRateChart(); return true;
       }
     }catch{}
   }
@@ -552,3 +561,54 @@ $('#liveNow').onclick=async()=>{toast('Checking rate…');toast(await liveRate(t
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)liveRate()});
 setInterval(()=>liveRate(),600000);
 liveRate();
+
+/* ---------- exchange-rate line graph (past week / cycle / 30 days) ---------- */
+const RH='kaksa_rhist';
+let rhist=JSON.parse(localStorage.getItem(RH)||'{}'), rhRange='7', rhChart=null, rhBusy=false, rhAgain=false;
+const rhFailed=new Set();
+async function histRate(d){
+  if(rhist[d])return rhist[d];
+  for(const u of [`https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${d}/v1/currencies/usd.json`,`https://${d}.currency-api.pages.dev/v1/currencies/usd.json`]){
+    try{const r=await fetch(u);if(!r.ok)continue;const v=+(await r.json()).usd.khr;if(v>1000&&v<10000){rhist[d]=v;return v}}catch{}
+  }
+  return null;
+}
+function rhDays(){
+  const t=today(); let from;
+  if(rhRange==='cycle')from=cycle(0).from;
+  else{const x=new Date();x.setDate(x.getDate()-(+rhRange-1));from=ymd(x)}
+  const x=new Date(from+'T00:00'); if(from>=t)x.setDate(x.getDate()-1);
+  const out=[];for(;ymd(x)<=t;x.setDate(x.getDate()+1))out.push(ymd(x));
+  return out;
+}
+async function renderRateChart(){
+  if(!$('#tab-set').classList.contains('on'))return;
+  if(rhBusy){rhAgain=true;return}
+  rhBusy=true;
+  try{
+    $$('#rhSeg button').forEach(b=>b.classList.toggle('on',b.dataset.r===rhRange));
+    const days=rhDays(), t=today();
+    if(liveR.rate>0)rhist[t]=liveR.rate;
+    const need=days.filter(d=>d!==t&&!rhist[d]&&!rhFailed.has(d));
+    if(need.length)$('#rhMsg').textContent='Loading past rates…';
+    for(let i=0;i<need.length;i+=8)await Promise.all(need.slice(i,i+8).map(async d=>{if(!await histRate(d))rhFailed.add(d)}));
+    const keep=Object.keys(rhist).sort().slice(-150),o={};keep.forEach(k=>o[k]=rhist[k]);rhist=o;
+    try{localStorage.setItem(RH,JSON.stringify(rhist))}catch{}
+    const pts=days.filter(d=>rhist[d]).map(d=>({d,v:rhist[d]}));
+    if(rhChart){rhChart.destroy();rhChart=null}
+    if(pts.length<2){$('#rhMsg').textContent='Not enough history yet. Open this page with internet and it fills in.';return}
+    const vs=pts.map(p=>p.v), first=pts[0], last=pts[pts.length-1], diff=last.v-first.v, pct=diff/first.v*100;
+    const hi=Math.max(...vs), lo=Math.min(...vs);
+    $('#rhMsg').textContent=`${Math.abs(diff)<0.005?'► No change':diff>0?'▲ Up ៛'+diff.toFixed(2):'▼ Down ៛'+Math.abs(diff).toFixed(2)} (${pct>=0?'+':''}${pct.toFixed(2)}%) since ${nice(first.d)} · High ៛${hi.toFixed(2)} · Low ៛${lo.toFixed(2)}`;
+    if(typeof Chart==='undefined')return;
+    Chart.defaults.color='#9a92b5';
+    const pad=Math.max(2,(hi-lo)*.25);
+    rhChart=new Chart($('#rateChart'),{type:'line',
+      data:{labels:pts.map(p=>nice(p.d)),datasets:[{data:vs,borderColor:'#f5b942',backgroundColor:'rgba(245,185,66,.14)',fill:true,tension:.3,borderWidth:2.5,pointRadius:pts.length>16?0:3,pointHoverRadius:5,pointBackgroundColor:'#f5b942'}]},
+      options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>'៛'+(+i.raw).toFixed(2)+' per $1'}}},
+        scales:{y:{min:lo-pad,max:hi+pad,grid:{color:'#2f2947'},ticks:{callback:v=>'៛'+(+v).toLocaleString(undefined,{maximumFractionDigits:1})}},x:{grid:{display:false},ticks:{maxRotation:0,autoSkip:true}}}}});
+  }finally{rhBusy=false;if(rhAgain){rhAgain=false;renderRateChart()}}
+}
+$('#rhSeg').onclick=e=>{const r=e.target.dataset.r;if(r){rhRange=r;renderRateChart()}};
+$('#rate').onchange=()=>{S.settings.rate=+$('#rate').value||4100;save();toast('Manual rate saved ✓')};
+$('#heroSeg').onclick=e=>{const h=e.target.dataset.h;if(h){S.settings.sep=h==='sep';save()}};
