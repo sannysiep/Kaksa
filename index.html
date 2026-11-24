@@ -7,7 +7,7 @@
 <title>Kaksa · Spending Tracker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 <header>
@@ -78,19 +78,47 @@
 
   <!-- CHARTS -->
   <section id="tab-chart" class="tab">
+    <div class="dashhead"><h2>Insights</h2><small>Your spending, analysed</small></div>
     <div class="card">
       <div class="row"><input type="date" id="cFrom"><input type="date" id="cTo"></div>
       <div class="row"><button class="btn ghost" id="cCycle">This cycle</button><button class="btn ghost" id="cMonth">This month</button></div>
       <p class="hint" id="cTotal"></p>
-      <canvas id="barChart" height="220"></canvas>
-      <p class="hint" style="text-align:center">Tap a day to see what you spent on it</p>
     </div>
+
+    <div class="sec">Overview</div>
+    <div class="tiles" id="kpis"></div>
+
+    <div class="sec">Trends</div>
+    <div class="card">
+      <div class="ctitle"><b>Spending trend</b><small>Daily spend, 7-day average, and your running total against the previous period</small></div>
+      <canvas id="trendChart" height="260"></canvas>
+    </div>
+    <div class="card">
+      <div class="ctitle"><b>Daily spend by category</b><small>Tap a day to drill down</small></div>
+      <canvas id="barChart" height="220"></canvas>
+    </div>
+
+    <div class="sec">Breakdown</div>
     <div class="card" id="bdCard">
       <div class="bdhead"><small id="bdScope"></small><b id="bdTitle"></b></div>
       <div class="crumbs" id="bdCrumbs"></div>
       <div class="donut" id="donut"><canvas id="pieChart" height="240"></canvas><div class="dcenter"><b id="dcTotal"></b><small id="dcLab"></small></div></div>
       <div id="bdRows"></div>
     </div>
+    <div class="card">
+      <div class="ctitle"><b>Spending by weekday</b><small id="wkNote"></small></div>
+      <canvas id="wkChart" height="180"></canvas>
+    </div>
+
+    <div class="sec">Exchange rate</div>
+    <div class="card">
+      <div class="ctitle"><b>💱 US dollar → riel</b><small>How many riel $1 buys, day by day</small></div>
+      <div class="seg" id="rhSeg"><button data-r="7">7 days</button><button data-r="cycle">This cycle</button><button data-r="30">30 days</button></div>
+      <canvas id="rateChart" height="190"></canvas>
+      <p class="hint" id="rhMsg"></p>
+    </div>
+
+    <div class="sec">Transactions</div>
     <div class="card"><h3 id="listTitle"></h3><div id="chList"></div></div>
   </section>
 
@@ -141,9 +169,7 @@
         <label>Manual rate (៛ per $1)</label>
         <input id="rate" type="number" inputmode="decimal">
       </div>
-      <div class="seg" id="rhSeg"><button data-r="7">7 days</button><button data-r="cycle">This cycle</button><button data-r="30">30 days</button></div>
-      <canvas id="rateChart" height="190"></canvas>
-      <p class="hint" id="rhMsg"></p>
+      <p class="hint">The line graph of how the rate moved is in the Insights tab.</p>
     </div>
     <div class="card">
       <h3>Day locks</h3>
@@ -206,7 +232,7 @@
   <button data-t="add" class="on">➕<span>Add</span></button>
   <button data-t="hist">🧾<span>History</span></button>
   <button data-t="owed">🤝<span>Owed</span></button>
-  <button data-t="chart">📊<span>Charts</span></button>
+  <button data-t="chart">📈<span>Insights</span></button>
   <button data-t="bills">💡<span>Bills</span></button>
   <button data-t="set">⚙️<span>Settings</span></button>
 </nav>
@@ -215,7 +241,7 @@
 <div id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="app.js"></script>
-<script src="bills.js"></script>
+<script src="app.js?v=9"></script>
+<script src="bills.js?v=9"></script>
 </body>
 </html>
