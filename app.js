@@ -11,13 +11,15 @@ const today=()=>ymd(new Date());
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
 let S=JSON.parse(localStorage.getItem(KEY)||'null')||{entries:[],payments:[],people:[],settings:{rate:4100,cycleDay:15,disp:'KHR',lockedBefore:null},dayLocks:{},qrs:[],updated:0};
-function fix(){S.dayLocks=S.dayLocks||{};S.deleted=S.deleted||{};S.qrs=S.qrs||[];S.settings=Object.assign({rate:4100,cycleDay:15,disp:'KHR',lockedBefore:null,parkRate:500,qrActive:null},S.settings||{})}
+function fix(){S.dayLocks=S.dayLocks||{};S.deleted=S.deleted||{};S.qrs=S.qrs||[];S.settings=Object.assign({rate:4100,cycleDay:15,disp:'KHR',lockedBefore:null,parkRate:500,qrActive:null,live:true},S.settings||{})}
 fix();
 let sync=JSON.parse(localStorage.getItem(SYNC)||'{}');
 let form={kind:'me',cur:'KHR',cat:CATS[0],people:[]}, cOff=0, charts={};
 
 /* ---------- money helpers ---------- */
-const rate=()=>+S.settings.rate||4100;
+const LIVE='kaksa_live';
+let liveR=JSON.parse(localStorage.getItem(LIVE)||'null')||{rate:0,at:0}, liveFail=false;
+const rate=()=>S.settings.live&&liveR.rate>0?liveR.rate:(+S.settings.rate||4100);
 const parkRate=()=>+S.settings.parkRate||500;
 const toKHR=(a,c)=>c==='USD'?a*rate():a;
 const fmt=k=>S.settings.disp==='USD'?'$'+(k/rate()).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'៛'+Math.round(k).toLocaleString();
@@ -206,9 +208,9 @@ function payPopup(n){
 const RCSS="body{font:15px system-ui,sans-serif;background:#fbf8f1;color:#221c14;margin:0}.sheet{max-width:520px;margin:auto;padding:22px}h2{margin:0 0 2px}table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.9rem}td,th{padding:7px 4px;border-bottom:1px dashed #c9bfa8;text-align:left}td:last-child,th:last-child{text-align:right}.line{display:flex;justify-content:space-between;padding:3px 0}.total{font-size:1.4rem;font-weight:800;display:flex;justify-content:space-between;margin:10px 0}.tag{color:#7a705c;font-size:.8rem}.qr{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;margin-top:16px}.qr img{width:min(100%,320px);border-radius:12px}";
 function showReceipt(inner,title,extra=''){
   $('#sheet').className='sheet'; $('#sheet').onclick=null;
-  $('#sheet').innerHTML=inner+extra+'<div class="btns"><button class="btn" id="rPrint">Print / Save PDF</button><button class="btn ghost" id="rDl">Download</button><button class="btn ghost" id="rClose">Close</button></div>';
+  $('#sheet').innerHTML=inner+extra+'<div class="btns"><button class="btn" id="rPrint">Save as PNG</button><button class="btn ghost" id="rDl">Download</button><button class="btn ghost" id="rClose">Close</button></div>';
   $('#modal').hidden=false;
-  $('#rPrint').onclick=()=>window.print();
+  $('#rPrint').onclick=()=>savePng(inner,title);
   $('#rClose').onclick=()=>$('#modal').hidden=true;
   $('#rDl').onclick=()=>{
     const doc=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${RCSS}</style></head><body><div class="sheet">${inner}</div></body></html>`;
@@ -225,7 +227,7 @@ function receipt(n,qid){
   const qr=q&&left>0.5?`<div class="qr"><img src="${q.img}" alt="Payment QR"><div><b>Scan to pay</b><br>${esc(q.name)}<br>${esc(q.note||'')}<br><span class="tag">Type the amount when you pay</span></div></div>`:'';
   const qcur=q?q.id:'none';
   const chips=S.qrs.length&&left>0.5?`<div class="chips noprint" style="margin-top:12px">${S.qrs.map(x=>`<button class="chip ${x.id===qcur?'on':''}" data-qr="${x.id}">${esc(x.name)}</button>`).join('')}<button class="chip ${qcur==='none'?'on':''}" data-qr="none">No QR</button></div>`:'';
-  showReceipt(`<h2>Receipt for ${esc(n)}</h2><div class="tag">${nice(today())} · rate ៛${rate()} = $1</div>
+  showReceipt(`<h2>Receipt for ${esc(n)}</h2><div class="tag">${nice(today())}</div>
   <table><tr><th>Date</th><th>Item</th><th>Amount</th></tr>${rows.map(r=>`<tr><td>${nice(r.d)}</td><td>${r.t}</td><td>${r.v<0?'−':''}${fmt(Math.abs(r.v))}</td></tr>`).join('')}</table>
   <div class="line"><span>Total owed</span><span>${fmt(owed)}</span></div>
   <div class="line"><span>Paid so far</span><span>− ${fmt(paid)}</span></div>
@@ -236,7 +238,7 @@ function receipt(n,qid){
 function spendReceipt(){
   const r=hRange(), lab=x=>/^(0000|9999)/.test(x)?'…':nice(x);
   const es=S.entries.filter(e=>inRange(e.date,r)).sort((a,b)=>a.date.localeCompare(b.date)), t=totals(es);
-  showReceipt(`<h2>My spending</h2><div class="tag">${lab(r.from)} → ${lab(r.to)} · rate ៛${rate()} = $1</div>
+  showReceipt(`<h2>My spending</h2><div class="tag">${lab(r.from)} → ${lab(r.to)}</div>
   <table><tr><th>Date</th><th>Item</th><th>My share</th></tr>${es.map(e=>`<tr><td>${nice(e.date)}</td><td>${e.cat}${e.note?' · '+esc(e.note):''}${e.kind==='other'?' (paid for '+esc(e.people[0])+')':e.kind==='split'?' (split, total '+orig(e.amt,e.cur)+')':''}</td><td>${e.kind==='other'?'−':orig(mineN(e),e.cur)}</td></tr>`).join('')}</table>
   <div class="line"><span>Spent in riel</span><span>៛${Math.round(t.khr).toLocaleString()}</span></div>
   <div class="line"><span>Spent in USD</span><span>$${t.usd.toFixed(2)}</span></div>
@@ -244,31 +246,124 @@ function spendReceipt(){
   <div class="total"><span>Total spent</span><span>${fmt(t.all)}</span></div>`,`Spending-${r.from}-to-${r.to}`);
 }
 $('#hRec').onclick=spendReceipt;
+/* ---------- save receipt as a PNG picture (shares on phones, downloads on PC) ---------- */
+const loadH2C=()=>window.html2canvas?Promise.resolve():new Promise((ok,no)=>{
+  const add=(u,fail)=>{const t=document.createElement('script');t.src=u;t.onload=ok;t.onerror=fail;document.head.appendChild(t)};
+  add('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>add('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',no));
+});
+async function savePng(inner,title){
+  toast('Making picture…');
+  let box;
+  try{
+    await loadH2C();
+    if(document.fonts&&document.fonts.ready)await document.fonts.ready;
+    box=document.createElement('div');box.className='sheet';
+    box.style.cssText='position:absolute;left:-9999px;top:0;width:520px;max-width:none;max-height:none;border-radius:0;overflow:visible';
+    box.innerHTML=inner;document.body.appendChild(box);
+    const cv=await html2canvas(box,{scale:2,backgroundColor:'#fbf8f1',useCORS:true});
+    const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
+    const name=title.replace(/[^\w-]+/g,'_')+'.png', file=new File([blob],name,{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      try{await navigator.share({files:[file],title});return}catch(e){if(e&&e.name==='AbortError')return}
+    }
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();toast('Saved as PNG ✓');
+  }catch{toast('Could not make the picture. Check your internet once.')}
+  finally{if(box)box.remove()}
+}
+
 $('#modal').onclick=e=>{if(e.target.id==='modal')e.target.hidden=true};
 
-/* ---------- charts ---------- */
-$('#cCycle').onclick=()=>{const r=cycle(0);$('#cFrom').value=r.from;$('#cTo').value=r.to;renderCharts()};
-$('#cMonth').onclick=()=>{const n=new Date();$('#cFrom').value=ymd(new Date(n.getFullYear(),n.getMonth(),1));$('#cTo').value=ymd(new Date(n.getFullYear(),n.getMonth()+1,0));renderCharts()};
-$('#cFrom').onchange=$('#cTo').onchange=renderCharts;
-function renderCharts(){
+/* ---------- charts: tap a day, tap a category, see the full list ---------- */
+const PAL=['#f5b942','#3ddc97','#ff6b81','#7aa2ff','#c58bff','#ff9f5a','#5ee0e0','#b0a8c9','#e6e76a'];
+const catCol=c=>PAL[Math.max(0,CATS.indexOf(c))%PAL.length];
+let chDay=null, chCat=null;
+const chReset=()=>{chDay=chCat=null};
+const itemName=e=>{
+  let n=(e.note||'').trim();
+  if(e.cat===PARK) n=n.replace(/^\d+×\s*parking\s*·?\s*/i,'').trim()||'Parking';
+  return n||'No note';
+};
+$('#cCycle').onclick=()=>{const r=cycle(0);$('#cFrom').value=r.from;$('#cTo').value=r.to;chReset();renderCharts()};
+$('#cMonth').onclick=()=>{const n=new Date();$('#cFrom').value=ymd(new Date(n.getFullYear(),n.getMonth(),1));$('#cTo').value=ymd(new Date(n.getFullYear(),n.getMonth()+1,0));chReset();renderCharts()};
+$('#cFrom').onchange=$('#cTo').onchange=()=>{chReset();renderCharts()};
+$('#bdRows').onclick=e=>{const b=e.target.closest('[data-cat]');if(b){chCat=b.dataset.cat;renderCharts(true)}};
+$('#bdCrumbs').onclick=e=>{const b=e.target.closest('[data-x]');if(!b)return;if(b.dataset.x==='day')chDay=null;else chCat=null;renderCharts(true)};
+function renderCharts(still){
   if(!$('#cFrom').value){const r=cycle(0);$('#cFrom').value=r.from;$('#cTo').value=r.to}
   const r={from:$('#cFrom').value,to:$('#cTo').value};
-  const es=S.entries.filter(e=>inRange(e.date,r));
+  const all=S.entries.filter(e=>inRange(e.date,r));
+  const spent=all.filter(e=>mine(e)>0);
   const usd=S.settings.disp==='USD', conv=k=>usd?k/rate():k;
-  const days={}, cats={};
+  const tip=v=>usd?'$'+v.toFixed(2):'៛'+Math.round(v).toLocaleString();
+  const days={}, dc={};
   for(let d=new Date(r.from+'T00:00');ymd(d)<=r.to;d.setDate(d.getDate()+1)) days[ymd(d)]=0;
-  es.forEach(e=>{days[e.date]=(days[e.date]||0)+mine(e);cats[e.cat]=(cats[e.cat]||0)+mine(e)});
+  spent.forEach(e=>{days[e.date]=(days[e.date]||0)+mine(e);const k=e.date+'|'+e.cat;dc[k]=(dc[k]||0)+mine(e)});
+  if(chDay&&!(chDay in days))chDay=null;
+  const dayKeys=Object.keys(days);
   $('#cTotal').textContent=`My spending in this range: ${fmt(Object.values(days).reduce((a,b)=>a+b,0))}`;
-  Object.values(charts).forEach(c=>c.destroy());
+
+  /* breakdown: categories, or (after tapping a category) the things you used in it */
+  const groups={};
+  spent.filter(e=>(!chDay||e.date===chDay)&&(!chCat||e.cat===chCat)).forEach(e=>{
+    const k=chCat?itemName(e).toLowerCase():e.cat;
+    const g=groups[k]||(groups[k]={name:chCat?itemName(e):e.cat,v:0,n:0,cat:e.cat});
+    g.v+=mine(e);g.n++;
+  });
+  const rows=Object.values(groups).sort((a,b)=>b.v-a.v), tot=rows.reduce((s,g)=>s+g.v,0);
+  rows.forEach((g,i)=>g.col=chCat?PAL[i%PAL.length]:catCol(g.cat));
+  const longDay=d=>new Date(d+'T00:00').toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short'});
+  $('#bdScope').textContent=chDay?longDay(chDay):'Whole range';
+  $('#bdTitle').textContent=chCat?`${chCat} · what you used`:'Where it went';
+  $('#bdCrumbs').innerHTML=(chDay?`<button class="crumb" data-x="day">📅 ${nice(chDay)}</button>`:'')+(chCat?`<button class="crumb" data-x="cat">${esc(chCat)}</button>`:'');
+  $('#donut').hidden=!rows.length;
+  $('#dcTotal').textContent=fmt(tot);
+  $('#dcLab').textContent=chCat?chCat:chDay?'that day':'total';
+  $('#bdRows').innerHTML=rows.length?rows.map(g=>{
+    const pct=tot?Math.round(g.v/tot*100):0;
+    const inner=`<i class="fill" style="width:${pct}%;background:${g.col}"></i><span class="dot" style="background:${g.col}"></span><span class="nm">${esc(g.name)}<small>${g.n}×</small></span><span class="am">${fmt(g.v)}</span><span class="pc">${pct}%</span>`;
+    return chCat?`<div class="bd">${inner}</div>`:`<button class="bd" data-cat="${esc(g.name)}">${inner}</button>`;
+  }).join('')+(chCat?'':'<p class="hint" style="text-align:center">Tap a category to see exactly what you used</p>'):'<p class="hint" style="text-align:center">Nothing spent here.</p>';
+
+  /* full list for the current selection */
+  const lst=all.filter(e=>(!chDay||e.date===chDay)&&(!chCat||e.cat===chCat)).sort((a,b)=>b.date.localeCompare(a.date));
+  $('#listTitle').textContent=`${chCat||(chDay?nice(chDay):'All spending')} · ${lst.length} ${lst.length===1?'entry':'entries'}`;
+  let h='',last='';
+  lst.forEach(e=>{
+    if(e.date!==last){last=e.date;h+=`<div class="day">${longDay(e.date)}</div>`}
+    const who=e.kind==='other'?`Paid for ${esc(e.people[0])}`:e.kind==='split'?`Split with ${e.people.map(esc).join(', ')}`:'Just me';
+    h+=`<div class="item"><div class="l"><span><span class="dot" style="background:${catCol(e.cat)}"></span> ${e.cat}</span><span class="tag">${who}${e.note?' · '+esc(e.note):''}</span></div>
+      <div class="r"><b>${orig(e.amt,e.cur)}</b>${e.kind!=='me'?`<span class="tag">my share ${fmt(mine(e))}</span>`:''}</div></div>`;
+  });
+  $('#chList').innerHTML=h||'<p class="hint">Nothing in this range.</p>';
+
+  Object.values(charts).forEach(c=>c.destroy()); charts={};
   if(typeof Chart==='undefined')return;
   Chart.defaults.color='#9a92b5';
-  charts.b=new Chart($('#barChart'),{type:'bar',data:{labels:Object.keys(days).map(nice),datasets:[{label:'Per day',data:Object.values(days).map(conv),backgroundColor:'#f5b942',borderRadius:6}]},options:{plugins:{legend:{display:false}},scales:{y:{grid:{color:'#2f2947'}},x:{grid:{display:false}}}}});
-  const pal=['#f5b942','#3ddc97','#ff6b81','#7aa2ff','#c58bff','#ff9f5a','#5ee0e0','#b0a8c9','#e6e76a'];
-  charts.p=new Chart($('#pieChart'),{type:'doughnut',data:{labels:Object.keys(cats),datasets:[{data:Object.values(cats).map(conv),backgroundColor:pal,borderColor:'#1e1a2e'}]},options:{plugins:{legend:{position:'bottom'}}}});
+  const animation={duration:still?0:600};
+  const cats=CATS.filter(c=>spent.some(e=>e.cat===c));
+  charts.b=new Chart($('#barChart'),{type:'bar',
+    data:{labels:dayKeys.map(nice),datasets:cats.map(c=>({label:c,data:dayKeys.map(d=>conv(dc[d+'|'+c]||0)),
+      backgroundColor:ctx=>(!chDay||dayKeys[ctx.dataIndex]===chDay)?catCol(c):catCol(c)+'40',borderRadius:3,borderSkipped:false}))},
+    options:{animation,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{filter:i=>i.raw>0,callbacks:{label:i=>`${i.dataset.label}: ${tip(i.raw)}`}}},
+      scales:{y:{stacked:true,grid:{color:'#2f2947'}},x:{stacked:true,grid:{display:false},ticks:{maxRotation:0,autoSkip:true}}},
+      onHover:(ev,els)=>{if(ev.native&&ev.native.target)ev.native.target.style.cursor=els.length?'pointer':'default'},
+      onClick:(ev,_,ch)=>{
+        const p=ch.getElementsAtEventForMode(ev,'index',{intersect:false},true); if(!p.length)return;
+        const d=dayKeys[p[0].index]; chDay=chDay===d?null:d; chCat=null; renderCharts(true);
+        const c=$('#bdCard'); if(c.getBoundingClientRect&&c.getBoundingClientRect().top>innerHeight*.6)c.scrollIntoView({behavior:'smooth',block:'start'});
+      }}});
+  if(rows.length)charts.p=new Chart($('#pieChart'),{type:'doughnut',
+    data:{labels:rows.map(g=>g.name),datasets:[{data:rows.map(g=>conv(g.v)),backgroundColor:rows.map(g=>g.col),borderColor:'#1e1a2e',borderWidth:3,hoverOffset:6}]},
+    options:{cutout:'68%',animation,plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>`${i.label}: ${tip(i.raw)}`}}},
+      onClick:(ev,_,ch)=>{if(chCat)return;const p=ch.getElementsAtEventForMode(ev,'nearest',{intersect:true},true);if(p.length){chCat=rows[p[0].index].name;renderCharts(true)}}}});
 }
 
 /* ---------- settings / lock / tabs ---------- */
 function renderSettings(){
+  $$('#rateMode button').forEach(b=>b.classList.toggle('on',(b.dataset.m==='live')===!!S.settings.live));
+  $('#liveNow').hidden=!S.settings.live;
+  $('#liveMsg').textContent=S.settings.live?(liveR.rate?`⚡ Live: ៛${liveR.rate.toLocaleString(undefined,{maximumFractionDigits:2})} = $1 · updated ${new Date(liveR.at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}${liveFail?' (could not refresh, showing the last rate)':''}`:liveFail?'Could not reach the rate service. Using your manual rate for now.':'Getting the live rate…'):`Using your manual rate: ៛${(+S.settings.rate||4100).toLocaleString()} = $1`;
   $$('#dispSeg button').forEach(b=>b.classList.toggle('on',b.dataset.c===S.settings.disp));
   if(document.activeElement.id!=='rate')$('#rate').value=S.settings.rate;
   if(document.activeElement.id!=='parkRate')$('#parkRate').value=S.settings.parkRate;
@@ -429,3 +524,31 @@ async function checkUpdate(){
 }
 setTimeout(checkUpdate,2000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkUpdate()});
+
+/* ---------- live exchange rate (USD → KHR), refreshed at most once an hour ---------- */
+async function liveRate(force){
+  if(!S.settings.live)return false;
+  if(!force&&liveR.rate&&Date.now()-liveR.at<3600e3)return true;
+  const srcs=[
+    ['https://open.er-api.com/v6/latest/USD',j=>j.rates&&j.rates.KHR],
+    ['https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json',j=>j.usd&&j.usd.khr],
+    ['https://latest.currency-api.pages.dev/v1/currencies/usd.json',j=>j.usd&&j.usd.khr]
+  ];
+  for(const [u,pick] of srcs){
+    try{
+      const r=await fetch(u,{cache:'no-store'}); if(!r.ok)continue;
+      const v=+pick(await r.json());
+      if(v>1000&&v<10000){
+        const changed=Math.abs(v-liveR.rate)>=0.005;
+        liveR={rate:v,at:Date.now()}; liveFail=false; localStorage.setItem(LIVE,JSON.stringify(liveR));
+        changed?render():renderSettings(); return true;
+      }
+    }catch{}
+  }
+  liveFail=true; renderSettings(); return false;
+}
+$('#rateMode').onclick=e=>{const m=e.target.dataset.m;if(!m)return;S.settings.live=m==='live';save();if(S.settings.live)liveRate(true)};
+$('#liveNow').onclick=async()=>{toast('Checking rate…');toast(await liveRate(true)?'Rate updated ✓':'Could not reach the rate service')};
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)liveRate()});
+setInterval(()=>liveRate(),600000);
+liveRate();
