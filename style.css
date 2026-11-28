@@ -192,3 +192,6 @@ nav button{min-width:0}
 .btab td small{display:block;color:var(--mut);font-style:normal;font-size:.72rem}
 .rdl{display:block;text-align:right}
 .item .r.acts{display:flex;gap:6px;align-items:center;flex-direction:row}
+
+/* v11 */
+.rdl.dl{color:var(--mut);font-size:.7rem}
