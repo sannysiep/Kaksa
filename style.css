@@ -186,3 +186,9 @@ nav button{min-width:0}
 .ctitle b{font-size:1.02rem}
 .kpi b{font-size:1.12rem;overflow-wrap:anywhere}
 #kpis{margin-bottom:14px}
+
+/* v10: several readings per day */
+.btab td.rd{font-size:.78rem;white-space:nowrap}
+.btab td small{display:block;color:var(--mut);font-style:normal;font-size:.72rem}
+.rdl{display:block;text-align:right}
+.item .r.acts{display:flex;gap:6px;align-items:center;flex-direction:row}
