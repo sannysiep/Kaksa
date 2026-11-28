@@ -199,3 +199,9 @@ nav button{min-width:0}
 /* v12: "They paid" button grid */
 #kind{display:grid;grid-template-columns:1fr 1fr}
 #kind button{padding:11px 6px}
+
+/* v13: plain-language choices */
+.opt{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;border-radius:14px;border:1px solid var(--line);background:#16122a;color:var(--tx);font:inherit;cursor:pointer}
+.opt small{color:var(--mut);line-height:1.35}
+.opt.on{border-color:var(--gold);background:rgba(245,185,66,.12)}
+.opt.on b{color:var(--gold)}
