@@ -32,9 +32,10 @@ const lent=e=>e.kind==='other'?toKHR(e.amt,e.cur):e.kind==='split'?toKHR(e.amt,e
 const mineN=e=>e.kind==='me'?e.amt:e.kind==='split'?e.amt/(e.people.length+1):e.kind==='theirs'?shareN(e):0;
 const alt=k=>S.settings.disp==='USD'?'៛'+Math.round(k).toLocaleString():'$'+(k/rate()).toFixed(2);
 function totals(es){const t={khr:0,usd:0,lent:0};es.forEach(e=>{if(e.cur==='USD')t.usd+=mineN(e);else t.khr+=mineN(e);t.lent+=lent(e)});t.all=t.khr+t.usd*rate();return t}
-const owes=e=>e.kind==='other'?{[e.people[0]]:toKHR(e.amt,e.cur)}:e.kind==='split'?Object.fromEntries(e.people.map(p=>[p,toKHR(e.amt,e.cur)/(e.people.length+1)])):e.kind==='theirs'?{[e.people[0]]:-toKHR(shareN(e),e.cur)}:e.kind==='covered'?Object.fromEntries(e.people.map(p=>[p,toKHR(e.amt,e.cur)/(e.people.length+(e.inc?1:0))])):{};
+const owes=e=>e.kind==='other'?{[e.people[0]]:toKHR(e.amt,e.cur)}:e.kind==='split'?Object.fromEntries(e.people.map(p=>[p,toKHR(e.amt,e.cur)/(e.people.length+1)])):e.kind==='theirs'?{[e.people[0]]:-toKHR(shareN(e),e.cur)}:e.kind==='covered'?Object.fromEntries(e.people.map(p=>[p,toKHR(eachCov(e),e.cur)])):{};
+const eachCov=e=>e.each>0?+e.each:e.amt/(e.people.length+(e.inc?1:0));
 const who=e=>e.kind==='other'?`Paid for ${esc(e.people[0])}`:e.kind==='split'?`Split with ${e.people.map(esc).join(', ')}`:e.kind==='theirs'?`${esc(e.people[0])} paid${(e.n||2)>1?' · shared by '+(e.n||2):''}`:e.kind==='covered'?`Covered${e.from?' by '+esc(e.from):''} · ${e.people.map(esc).join(', ')} pay${e.people.length>1?'':'s'} me`:'Just me';
-const shareTags=e=>e.kind==='me'?'':e.kind==='covered'?`<span class="tag gold">${e.people.length>1?'each owes ':'owes me '}${fmt(toKHR(e.amt,e.cur)/(e.people.length+(e.inc?1:0)))}</span><span class="tag">I do not pay</span>`:`<span class="tag">my share ${fmt(mine(e))}</span>`+(e.kind==='theirs'?`<span class="tag rose">− deducted from ${esc(e.people[0])}</span>`:'');
+const shareTags=e=>e.kind==='me'?'':e.kind==='covered'?`<span class="tag gold">${e.people.length>1?'each owes ':'owes me '}${fmt(toKHR(eachCov(e),e.cur))}</span><span class="tag">I do not pay</span>`:`<span class="tag">my share ${fmt(mine(e))}</span>`+(e.kind==='theirs'?`<span class="tag rose">− deducted from ${esc(e.people[0])}</span>`:'');
 
 /* ---------- cycle ---------- */
 function cycle(off=0){
@@ -214,13 +215,14 @@ $('#owedList').onclick=e=>{
 function payPopup(n){
   const d=breakdown(n), iOwe=d.bal<-0.5, full=Math.abs(d.bal)>0.5?Math.abs(d.bal):0; let cur=S.settings.disp;
   const pays=S.payments.filter(p=>p.person===n).sort((a,b)=>b.date.localeCompare(a.date));
+  const items=S.entries.filter(e=>n in owes(e)).sort((a,b)=>b.date.localeCompare(a.date));
   const line=(l,v,c='')=>v>0.5?`<div class="item"><div class="l"><span>${l}</span></div><div class="r"><b class="${c}">${fmt(v)}</b></div></div>`:'';
   $('#sheet').className='sheet dark';
   $('#sheet').innerHTML=`<h2>${esc(n)}</h2>
   <p class="hint">${iOwe?'You owe them':full>0?'Still owes you':'Nothing owed right now'}</p>
   <div class="big ${iOwe?'rose':''}">${fmt(full)}</div><p class="hint">${alt(full)}</p>
   ${d.ded>0.5?'<div class="day">How this adds up</div>'+line('Lent to them',d.lent)+line('Deducted: what they paid that I share',d.ded,'rose')+line('Paid to me',d.paid)+line('Paid by me to them',d.back):''}
-  ${d.dedRows.length?'<div class="day">Deducted from what they owe</div>'+d.dedRows.sort((a,b)=>b.date.localeCompare(a.date)).map(e=>`<div class="item"><div class="l"><span class="rose">− ${fmt(mine(e))}</span><span class="tag">${nice(e.date)} · ${e.cat}${e.note?' · '+esc(e.note):''} · they paid ${orig(e.amt,e.cur)}${(e.n||2)>1&&!(e.share>0)?', split '+(e.n||2)+' ways':''}</span></div></div>`).join(''):''}
+  ${items.length?'<div class="day">Items added for '+esc(n)+'</div>'+items.map(e=>{const v=owes(e)[n];return `<div class="item"><div class="l"><span class="${v<0?'rose':'gold'}">${v<0?'− ':''}${fmt(Math.abs(v))}${v<0?' deducted':''}</span><span class="tag">${nice(e.date)} · ${e.cat}${e.note?' · '+esc(e.note):''} · ${who(e)} · total ${orig(e.amt,e.cur)}</span></div><div class="r">${isLocked(e.date)?'<span class="tag">🔒</span>':`<button class="btn danger small" data-delentry="${e.id}">Delete</button>`}</div></div>`}).join(''):''}
   <div class="day">${iOwe?'I paid them back':'Got paid'}</div>
   <div class="seg" id="pc"><button data-c="KHR">៛ Riel</button><button data-c="USD">$ USD</button></div>
   <input id="pamt" type="number" inputmode="decimal" step="any" placeholder="${iOwe?'How much did you pay them?':'How much did they pay?'}">
@@ -244,7 +246,18 @@ function payPopup(n){
     S.payments.push({id:uid(),date:today(),person:n,amt:iOwe?-a:a,cur});save();toast('Payment saved ✓');payPopup(n);
   };
   $('#pclose').onclick=()=>$('#modal').hidden=true;
-  $('#sheet').onclick=e=>{const id=e.target.dataset.undo;if(id&&confirm('Undo this payment?')){S.payments=S.payments.filter(p=>p.id!==id);S.deleted[id]=Date.now();save();payPopup(n)}};
+  $('#sheet').onclick=e=>{
+    const id=e.target.dataset.undo, de=e.target.dataset.delentry;
+    if(id&&confirm('Undo this payment?')){S.payments=S.payments.filter(p=>p.id!==id);S.deleted[id]=Date.now();save();payPopup(n)}
+    if(de){
+      const x=S.entries.find(y=>y.id===de); if(!x)return;
+      if(isLocked(x.date))return toast('🔒 That day is locked');
+      if(confirm('Delete this item? It is also removed from your history and totals.')){
+        S.entries=S.entries.filter(y=>y.id!==de);S.deleted[de]=Date.now();save();toast('Deleted');
+        if(n in balances())payPopup(n);else $('#modal').hidden=true;
+      }
+    }
+  };
 }
 
 /* ---------- receipts (print, save as PDF, or download) ---------- */
@@ -263,7 +276,7 @@ function showReceipt(inner,title,extra=''){
 function receipt(n,qid){
   const rows=[];
   S.entries.forEach(e=>{const v=owes(e)[n];if(!v)return;
-    if(v>0)rows.push({d:e.date,k:'owe',t:`${e.cat}${e.note?' · '+esc(e.note):''}${e.kind==='split'?' (split)':e.kind==='covered'?' (your share of '+orig(e.amt,e.cur)+', split '+(e.people.length+(e.inc?1:0))+' ways)':''}`,v});
+    if(v>0)rows.push({d:e.date,k:'owe',t:`${e.cat}${e.note?' · '+esc(e.note):''}${e.kind==='split'?' (split)':e.kind==='covered'?' (your share of '+orig(e.amt,e.cur)+(e.each>0?'':', split '+(e.people.length+(e.inc?1:0))+' ways')+')':''}`,v});
     else rows.push({d:e.date,k:'ded',t:`Deducted · you paid ${orig(e.amt,e.cur)} for ${e.cat}${e.note?' · '+esc(e.note):''}${(e.n||2)>1&&!(e.share>0)?' (my share, split '+(e.n||2)+' ways)':' (my share)'}`,v})});
   S.payments.filter(p=>p.person===n).forEach(p=>{const k=toKHR(p.amt,p.cur);
     rows.push(k>=0?{d:p.date,k:'pay',t:`Payment received · ${orig(p.amt,p.cur)}`,v:-k}:{d:p.date,k:'back',t:`I paid you · ${orig(-p.amt,p.cur)}`,v:-k})});
@@ -708,16 +721,22 @@ $('#heroSeg').onclick=e=>{const h=e.target.dataset.h;if(h){S.settings.sep=h==='s
 
 /* ---------- add what someone owes me when I do not pay my own part (e.g. parents paid) ---------- */
 function coverPopup(){
-  const cv={people:[],cur:S.settings.disp==='USD'?'USD':'KHR',cat:'🏠 Rent',inc:false};
+  const cv={people:[],cur:S.settings.disp==='USD'?'USD':'KHR',cat:'🏠 Rent',mode:'inc'};
   const sh=$('#sheet'); sh.className='sheet dark'; sh.onclick=null;
   sh.innerHTML=`<h2>Add what they owe me</h2>
-  <p class="hint">Use this when someone else (like your parents) paid, so you do not pay your own part, but your roommate still needs to pay you their part. It shows on their receipt.</p>
+  <p class="hint">Use this when someone else (like your parents) paid, so you do not pay anything, but your roommate still needs to pay you their part. It shows on their receipt.</p>
   <label>Who owes me?</label>
   <div class="chips" id="cvPeople"></div>
   <div class="row"><input id="cvNew" placeholder="Add a new name"><button class="btn ghost" id="cvAdd">Add</button></div>
-  <div class="row"><input id="cvAmt" type="number" inputmode="decimal" step="any" placeholder="Total amount"><div class="seg small" id="cvCur"><button data-c="KHR">៛ Riel</button><button data-c="USD">$ USD</button></div></div>
-  <label>How is the total split?</label>
-  <div class="seg" id="cvInc"><button data-i="0">Only they split it</button><button data-i="1">My part is in it too</button></div>
+  <label>Total amount of the bill</label>
+  <div class="row"><input id="cvAmt" type="number" inputmode="decimal" step="any" placeholder="e.g. 10000"><div class="seg small" id="cvCur"><button data-c="KHR">៛ Riel</button><button data-c="USD">$ USD</button></div></div>
+  <label>How much do they pay?</label>
+  <div id="cvModes">
+    <button class="opt" data-m="inc"><b>Split equally with me</b><small>I do not pay my part. Example: total 10,000 with one roommate, they pay 5,000.</small></button>
+    <button class="opt" data-m="only"><b>They pay all of it</b><small>Everyone I picked splits the whole total. Example: total 10,000 with one roommate, they pay 10,000.</small></button>
+    <button class="opt" data-m="custom"><b>I will type what each pays</b><small>Use this for any other amount.</small></button>
+  </div>
+  <input id="cvEach" type="number" inputmode="decimal" step="any" placeholder="How much does each person pay?" hidden>
   <div class="chips" id="cvCats"></div>
   <input id="cvNote" placeholder="What is it for? (optional) e.g. rent">
   <input id="cvFrom" placeholder="Who covered it? (optional) e.g. Parents">
@@ -726,30 +745,37 @@ function coverPopup(){
   <div class="btns"><button class="btn ghost" id="cvClose">Cancel</button><button class="btn" id="cvSave">Save</button></div>`;
   $('#modal').hidden=false;
   $('#cvDate').max=today(); $('#cvDate').value=today();
+  const each=()=>{
+    const a=+$('#cvAmt').value, n=cv.people.length;
+    return cv.mode==='custom'?+$('#cvEach').value:cv.mode==='inc'?(n?a/(n+1):0):(n?a/n:0);
+  };
   const draw=()=>{
     $('#cvPeople').innerHTML=S.people.length?S.people.map(p=>`<button class="chip ${cv.people.includes(p)?'on':''}" data-p="${esc(p)}">${esc(p)}</button>`).join(''):'<span class="hint">No names yet. Add one below.</span>';
     $$('#cvCur button').forEach(b=>b.classList.toggle('on',b.dataset.c===cv.cur));
-    $$('#cvInc button').forEach(b=>b.classList.toggle('on',(b.dataset.i==='1')===cv.inc));
+    $$('#cvModes .opt').forEach(b=>b.classList.toggle('on',b.dataset.m===cv.mode));
+    $('#cvEach').hidden=cv.mode!=='custom';
     $('#cvCats').innerHTML=CATS.map(c=>`<button class="chip ${c===cv.cat?'on':''}" data-c="${c}">${c}</button>`).join('');
-    const a=+$('#cvAmt').value, n=cv.people.length, div=n+(cv.inc?1:0);
-    $('#cvHint').textContent=a>0&&n?`${n>1?'Each of the '+n+' people pays':cv.people[0]+' pays'} ${orig(a/div,cv.cur)}${cv.inc?'. Your own part ('+orig(a/div,cv.cur)+') is not charged to you':''}. Total they owe you: ${orig(a*n/div,cv.cur)}.`:'';
+    const a=+$('#cvAmt').value, n=cv.people.length, ea=each();
+    $('#cvHint').textContent=n&&ea>0?`${n>1?'Each of the '+n+' people pays':cv.people[0]+' pays'} ${orig(ea,cv.cur)}. Total they owe you: ${orig(ea*n,cv.cur)}. You pay nothing.`:'';
   };
   draw();
   $('#cvPeople').onclick=e=>{const p=e.target.dataset.p;if(!p)return;cv.people=cv.people.includes(p)?cv.people.filter(x=>x!==p):[...cv.people,p];draw()};
   $('#cvAdd').onclick=()=>{const n=$('#cvNew').value.trim();if(!n)return;if(!S.people.includes(n))S.people.push(n);if(!cv.people.includes(n))cv.people.push(n);$('#cvNew').value='';save(false);draw()};
   $('#cvCur').onclick=e=>{if(e.target.dataset.c){cv.cur=e.target.dataset.c;draw()}};
-  $('#cvInc').onclick=e=>{if(e.target.dataset.i){cv.inc=e.target.dataset.i==='1';draw()}};
+  $('#cvModes').onclick=e=>{const b=e.target.closest('[data-m]');if(b){cv.mode=b.dataset.m;draw()}};
   $('#cvCats').onclick=e=>{if(e.target.dataset.c){cv.cat=e.target.dataset.c;draw()}};
-  $('#cvAmt').oninput=draw;
+  $('#cvAmt').oninput=$('#cvEach').oninput=draw;
   $('#cvClose').onclick=()=>$('#modal').hidden=true;
   $('#cvSave').onclick=()=>{
-    const amt=+$('#cvAmt').value, date=$('#cvDate').value;
-    if(!cv.people.length)return toast('Pick who owes you');
-    if(!(amt>0))return toast('Enter the total amount');
+    const ea=each(), n=cv.people.length; let amt=+$('#cvAmt').value, date=$('#cvDate').value;
+    if(!n)return toast('Pick who owes you');
+    if(cv.mode==='custom'){ if(!(ea>0))return toast('Enter how much each person pays'); if(!(amt>0))amt=ea*n }
+    else if(!(amt>0))return toast('Enter the total amount');
     if(!date||date>today())return toast('Pick today or a past day');
     if(isLocked(date))return toast('🔒 That day is locked');
-    S.entries.push({id:uid(),date,amt,cur:cv.cur,cat:cv.cat,note:$('#cvNote').value.trim(),kind:'covered',people:[...cv.people],inc:cv.inc,from:$('#cvFrom').value.trim()});
-    $('#modal').hidden=true; save(); toast('Saved ✓');
+    const e={id:uid(),date,amt,cur:cv.cur,cat:cv.cat,note:$('#cvNote').value.trim(),kind:'covered',people:[...cv.people],inc:cv.mode==='inc',from:$('#cvFrom').value.trim()};
+    if(cv.mode==='custom')e.each=ea;
+    S.entries.push(e); $('#modal').hidden=true; save(); toast('Saved ✓');
   };
 }
 $('#addOwed').onclick=coverPopup;
