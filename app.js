@@ -24,12 +24,17 @@ const parkRate=()=>+S.settings.parkRate||500;
 const toKHR=(a,c)=>c==='USD'?a*rate():a;
 const fmt=k=>S.settings.disp==='USD'?'$'+(k/rate()).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'៛'+Math.round(k).toLocaleString();
 const orig=(a,c)=>c==='USD'?'$'+(+a).toFixed(2):'៛'+Math.round(a).toLocaleString();
-const mine=e=>e.kind==='me'?toKHR(e.amt,e.cur):e.kind==='split'?toKHR(e.amt,e.cur)/(e.people.length+1):0;
+/* kind 'theirs' = someone else paid and I share it. amt = what they paid, n = people sharing (me included),
+   share = my own amount if the split is not equal. It counts in MY spending and is DEDUCTED from what they owe me. */
+const shareN=e=>e.share>0?+e.share:e.amt/Math.max(1,e.n||2);
+const mine=e=>e.kind==='me'?toKHR(e.amt,e.cur):e.kind==='split'?toKHR(e.amt,e.cur)/(e.people.length+1):e.kind==='theirs'?toKHR(shareN(e),e.cur):0;
 const lent=e=>e.kind==='other'?toKHR(e.amt,e.cur):e.kind==='split'?toKHR(e.amt,e.cur)*e.people.length/(e.people.length+1):0;
-const mineN=e=>e.kind==='me'?e.amt:e.kind==='split'?e.amt/(e.people.length+1):0;
+const mineN=e=>e.kind==='me'?e.amt:e.kind==='split'?e.amt/(e.people.length+1):e.kind==='theirs'?shareN(e):0;
 const alt=k=>S.settings.disp==='USD'?'៛'+Math.round(k).toLocaleString():'$'+(k/rate()).toFixed(2);
 function totals(es){const t={khr:0,usd:0,lent:0};es.forEach(e=>{if(e.cur==='USD')t.usd+=mineN(e);else t.khr+=mineN(e);t.lent+=lent(e)});t.all=t.khr+t.usd*rate();return t}
-const owes=e=>e.kind==='other'?{[e.people[0]]:toKHR(e.amt,e.cur)}:e.kind==='split'?Object.fromEntries(e.people.map(p=>[p,toKHR(e.amt,e.cur)/(e.people.length+1)])):{};
+const owes=e=>e.kind==='other'?{[e.people[0]]:toKHR(e.amt,e.cur)}:e.kind==='split'?Object.fromEntries(e.people.map(p=>[p,toKHR(e.amt,e.cur)/(e.people.length+1)])):e.kind==='theirs'?{[e.people[0]]:-toKHR(shareN(e),e.cur)}:{};
+const who=e=>e.kind==='other'?`Paid for ${esc(e.people[0])}`:e.kind==='split'?`Split with ${e.people.map(esc).join(', ')}`:e.kind==='theirs'?`${esc(e.people[0])} paid${(e.n||2)>1?' · shared by '+(e.n||2):''}`:'Just me';
+const shareTags=e=>e.kind==='me'?'':`<span class="tag">my share ${fmt(mine(e))}</span>`+(e.kind==='theirs'?`<span class="tag rose">− deducted from ${esc(e.people[0])}</span>`:'');
 
 /* ---------- cycle ---------- */
 function cycle(off=0){
@@ -71,6 +76,8 @@ function render(){
   $('#sUSD').textContent='$ '+t.usd.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
   $('#sLent').textContent=fmt(t.lent);
   $('#sOwed').textContent=fmt(Object.values(balances()).reduce((s,v)=>s+Math.max(v,0),0));
+  const iowe=Object.values(balances()).reduce((s,v)=>s+Math.max(-v,0),0);
+  $('#iOweBox').hidden=iowe<=0.5; $('#sIOwe').textContent=fmt(iowe);
   renderForm(); renderHist(); renderOwed(); renderSettings(); renderLocks(); renderQrs();
   if($('#tab-chart').classList.contains('on')) renderCharts();
   if($('#tab-bills').classList.contains('on')&&typeof renderBills==='function') renderBills();
@@ -82,32 +89,47 @@ function renderForm(){
   $$('#cur button').forEach(b=>b.classList.toggle('on',b.dataset.c===form.cur));
   $('#cats').innerHTML=CATS.map(c=>`<button class="chip ${c===form.cat?'on':''}" data-c="${c}">${c}</button>`).join('');
   const pb=$('#peopleBox'); pb.hidden=form.kind==='me';
-  $('#peopleLabel').textContent=form.kind==='other'?'Who did you pay for?':'Split with who? (you are included automatically)';
+  $('#peopleLabel').textContent=form.kind==='other'?'Who did you pay for?':form.kind==='theirs'?'Who paid?':'Split with who? (you are included automatically)';
+  $('#theirBox').hidden=form.kind!=='theirs';
+  $('#amt').placeholder=form.kind==='theirs'?'Total amount they paid':'Amount';
   $('#people').innerHTML=S.people.length?S.people.map(p=>`<button class="chip ${form.people.includes(p)?'on':''}" data-p="${esc(p)}">${esc(p)}</button>`).join(''):'<span class="hint">No names yet. Add one below.</span>';
   const park=form.cat===PARK, t=Math.max(1,parseInt($('#pTimes').value)||1);
   $('#parkRow').hidden=!park; $('#amtRow').hidden=park;
   $('#pTotal').textContent=`× ៛${parkRate()} = ៛${(t*parkRate()).toLocaleString()}`;
   const a=park?t*parkRate():+$('#amt').value, cu=park?'KHR':form.cur;
   $('#splitHint').textContent=form.kind==='split'&&form.people.length&&a?`Each person pays ${orig(a/(form.people.length+1),cu)} (${form.people.length+1} people)`:'';
+  if(form.kind==='theirs'){
+    const n=Math.max(1,parseInt($('#nPeople').value)||2), sh=+$('#myShare').value, share=sh>0?sh:(a?a/n:0), pn=form.people[0];
+    let t='';
+    if(a&&share>a+0.001)t='My share cannot be more than the total they paid.';
+    else if(a){
+      t=`My share is ${orig(share,cu)}`+(!(sh>0)&&n>1?` (${orig(a,cu)} ÷ ${n} people)`:'')+'.';
+      if(pn){const bal=breakdown(pn).bal, after=bal-toKHR(share,cu), say=v=>v>0.5?`${pn} owes you ${fmt(v)}`:v<-0.5?`you owe ${pn} ${fmt(-v)}`:`${pn} owes you nothing`;t+=` Now: ${say(bal)}. After this: ${say(after)}.`}
+    }
+    $('#theirHint').textContent=t;
+  }
   const dl=isLocked($('#date').value||today());$('#dayNote').hidden=!dl;$('#saveEntry').disabled=dl;
 }
 $('#kind').onclick=e=>{const k=e.target.dataset.k;if(k){form.kind=k;form.people=[];renderForm()}};
 $('#cur').onclick=e=>{const c=e.target.dataset.c;if(c){form.cur=c;renderForm()}};
 $('#cats').onclick=e=>{const c=e.target.dataset.c;if(c){form.cat=c;renderForm()}};
 $('#amt').oninput=renderForm;
+$('#nPeople').oninput=$('#myShare').oninput=renderForm;
+$('#nMinus').onclick=()=>{$('#nPeople').value=Math.max(1,(parseInt($('#nPeople').value)||2)-1);renderForm()};
+$('#nPlus').onclick=()=>{$('#nPeople').value=(parseInt($('#nPeople').value)||2)+1;renderForm()};
 $('#pTimes').oninput=renderForm;
 $('#pMinus').onclick=()=>{$('#pTimes').value=Math.max(1,(parseInt($('#pTimes').value)||1)-1);renderForm()};
 $('#pPlus').onclick=()=>{$('#pTimes').value=(parseInt($('#pTimes').value)||1)+1;renderForm()};
 $('#people').onclick=e=>{
   const p=e.target.dataset.p; if(!p)return;
-  if(form.kind==='other') form.people=[p];
+  if(form.kind==='other'||form.kind==='theirs') form.people=[p];
   else form.people=form.people.includes(p)?form.people.filter(x=>x!==p):[...form.people,p];
   renderForm();
 };
 $('#addPerson').onclick=()=>{
   const n=$('#newPerson').value.trim(); if(!n)return;
   if(!S.people.includes(n)) S.people.push(n);
-  form.people=form.kind==='other'?[n]:[...new Set([...form.people,n])];
+  form.people=form.kind==='other'||form.kind==='theirs'?[n]:[...new Set([...form.people,n])];
   $('#newPerson').value=''; save();
 };
 $('#date').max=today(); $('#date').value=today(); $('#date').onchange=renderForm;
@@ -116,9 +138,14 @@ $('#saveEntry').onclick=()=>{
   if(!(amt>0)) return toast('Enter an amount');
   if(!date||date>today()) return toast('Pick today or a past day');
   if(isLocked(date)) return toast('🔒 That day is locked');
-  if(form.kind!=='me'&&!form.people.length) return toast('Pick at least one person');
-  S.entries.push({id:uid(),date,amt,cur:park?'KHR':form.cur,cat:form.cat,note:(park?`${times}× parking`+($('#note').value.trim()?' · ':''):'')+$('#note').value.trim(),kind:form.kind,people:[...form.people]});
-  $('#amt').value='';$('#note').value='';$('#pTimes').value=1;form.people=[];
+  if(form.kind!=='me'&&!form.people.length) return toast(form.kind==='theirs'?'Pick who paid':'Pick at least one person');
+  const e={id:uid(),date,amt,cur:park?'KHR':form.cur,cat:form.cat,note:(park?`${times}× parking`+($('#note').value.trim()?' · ':''):'')+$('#note').value.trim(),kind:form.kind,people:[...form.people]};
+  if(form.kind==='theirs'){
+    e.n=Math.max(1,parseInt($('#nPeople').value)||2);
+    const sh=+$('#myShare').value; if(sh>0){ if(sh>amt+0.001) return toast('My share cannot be more than the total'); e.share=sh }
+  }
+  S.entries.push(e);
+  $('#amt').value='';$('#note').value='';$('#pTimes').value=1;$('#myShare').value='';$('#nPeople').value=2;form.people=[];
   save(); toast('Saved ✓');
 };
 
@@ -136,9 +163,8 @@ function renderHist(){
   es.forEach(e=>{
     const lk=isLocked(e.date);
     if(e.date!==last){last=e.date;h+=`<div class="day">${lk?'🔒 ':''}${new Date(e.date+'T00:00').toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short'})}</div>`}
-    const who=e.kind==='other'?`Paid for ${esc(e.people[0])}`:e.kind==='split'?`Split with ${e.people.map(esc).join(', ')}`:'Just me';
-    h+=`<div class="item"><div class="l"><span>${e.cat}</span><span class="tag">${who}${e.note?' · '+esc(e.note):''}</span></div>
-      <div class="r"><b>${orig(e.amt,e.cur)}</b>${e.kind!=='me'?`<span class="tag">my share ${fmt(mine(e))}</span>`:''}
+    h+=`<div class="item"><div class="l"><span>${e.cat}</span><span class="tag">${who(e)}${e.note?' · '+esc(e.note):''}</span></div>
+      <div class="r"><b>${orig(e.amt,e.cur)}</b>${shareTags(e)}
       ${lk?'':`<button class="btn danger small" data-del="${e.id}">Delete</button>`}</div></div>`;
   });
   $('#histList').innerHTML=`<div class="card" style="gap:0">${h}</div>`;
@@ -161,14 +187,24 @@ function balances(){
   S.payments.forEach(p=>b[p.person]=(b[p.person]||0)-toKHR(p.amt,p.cur));
   return b;
 }
+/* everything about one person: lent to them, deducted (what they paid that I share), paid to me, paid by me to them.
+   bal > 0 = they owe me, bal < 0 = I owe them. */
+function breakdown(n){
+  let lent=0,ded=0,paid=0,back=0; const dedRows=[];
+  S.entries.forEach(e=>{const v=owes(e)[n];if(v>0)lent+=v;else if(v<0){ded+=-v;dedRows.push(e)}});
+  S.payments.filter(p=>p.person===n).forEach(p=>{const k=toKHR(p.amt,p.cur);if(k>=0)paid+=k;else back+=-k});
+  return {lent,ded,paid,back,dedRows,bal:lent-ded-paid+back};
+}
+const payTxt=p=>p.amt<0?`You paid them ${orig(-p.amt,p.cur)}`:orig(p.amt,p.cur);
 function renderOwed(){
   const b=balances(), names=Object.keys(b);
-  if(!names.length){$('#owedList').innerHTML='<div class="card"><p class="hint">No one owes you anything yet. Use "Paid for someone" or "Split" when adding.</p></div>';return}
+  if(!names.length){$('#owedList').innerHTML='<div class="card"><p class="hint">No one owes you anything yet. Use "Paid for someone" or "Split" when adding, or "They paid" when someone else paid and you share it.</p></div>';return}
   $('#owedList').innerHTML=names.sort((a,c)=>b[c]-b[a]).map(n=>{
-    const v=b[n];
+    const v=b[n], d=breakdown(n);
+    const parts=[d.lent>0.5?`Lent ${fmt(d.lent)}`:'',d.ded>0.5?`<span class="rose">Deducted −${fmt(d.ded)}</span>`:'',d.paid>0.5?`Paid −${fmt(d.paid)}`:'',d.back>0.5?`You paid them ${fmt(d.back)}`:''].filter(Boolean);
     return `<div class="card tap" data-pay="${esc(n)}"><div class="person"><div><b>${esc(n)}</b><br>
-    <span class="${v>0.5?'gold':'jade'}">${v>0.5?'owes you '+fmt(v):'all settled ✓'}</span>${v>0.5?`<br><span class="tag">${alt(v)}</span>`:''}</div>
-    <div class="row"><button class="btn ghost small" data-rec="${esc(n)}">Receipt</button>${v>0.5?`<button class="btn small" data-pay="${esc(n)}">Got paid</button>`:''}</div></div></div>`;
+    <span class="${v>0.5?'gold':v<-0.5?'rose':'jade'}">${v>0.5?'owes you '+fmt(v):v<-0.5?'you owe them '+fmt(-v):'all settled ✓'}</span>${Math.abs(v)>0.5?`<br><span class="tag">${alt(Math.abs(v))}</span>`:''}${parts.length&&(d.ded>0.5||d.back>0.5)?`<br><span class="tag">${parts.join(' · ')}</span>`:''}</div>
+    <div class="row"><button class="btn ghost small" data-rec="${esc(n)}">Receipt</button>${v>0.5?`<button class="btn small" data-pay="${esc(n)}">Got paid</button>`:v<-0.5?`<button class="btn small" data-pay="${esc(n)}">I paid them</button>`:''}</div></div></div>`;
   }).join('');
 }
 $('#owedList').onclick=e=>{
@@ -176,32 +212,36 @@ $('#owedList').onclick=e=>{
   const p=e.target.closest('[data-pay]'); if(p) payPopup(p.dataset.pay);
 };
 function payPopup(n){
-  const full=Math.max(balances()[n]||0,0); let cur=S.settings.disp;
+  const d=breakdown(n), iOwe=d.bal<-0.5, full=Math.abs(d.bal)>0.5?Math.abs(d.bal):0; let cur=S.settings.disp;
   const pays=S.payments.filter(p=>p.person===n).sort((a,b)=>b.date.localeCompare(a.date));
+  const line=(l,v,c='')=>v>0.5?`<div class="item"><div class="l"><span>${l}</span></div><div class="r"><b class="${c}">${fmt(v)}</b></div></div>`:'';
   $('#sheet').className='sheet dark';
   $('#sheet').innerHTML=`<h2>${esc(n)}</h2>
-  <p class="hint">${full>0.5?'Still owes you':'Nothing owed right now'}</p>
-  <div class="big">${fmt(full)}</div><p class="hint">${alt(full)}</p>
+  <p class="hint">${iOwe?'You owe them':full>0?'Still owes you':'Nothing owed right now'}</p>
+  <div class="big ${iOwe?'rose':''}">${fmt(full)}</div><p class="hint">${alt(full)}</p>
+  ${d.ded>0.5?'<div class="day">How this adds up</div>'+line('Lent to them',d.lent)+line('Deducted: what they paid that I share',d.ded,'rose')+line('Paid to me',d.paid)+line('Paid by me to them',d.back):''}
+  ${d.dedRows.length?'<div class="day">Deducted from what they owe</div>'+d.dedRows.sort((a,b)=>b.date.localeCompare(a.date)).map(e=>`<div class="item"><div class="l"><span class="rose">− ${fmt(mine(e))}</span><span class="tag">${nice(e.date)} · ${e.cat}${e.note?' · '+esc(e.note):''} · they paid ${orig(e.amt,e.cur)}${(e.n||2)>1&&!(e.share>0)?', split '+(e.n||2)+' ways':''}</span></div></div>`).join(''):''}
+  <div class="day">${iOwe?'I paid them back':'Got paid'}</div>
   <div class="seg" id="pc"><button data-c="KHR">៛ Riel</button><button data-c="USD">$ USD</button></div>
-  <input id="pamt" type="number" inputmode="decimal" step="any" placeholder="How much did they pay?">
+  <input id="pamt" type="number" inputmode="decimal" step="any" placeholder="${iOwe?'How much did you pay them?':'How much did they pay?'}">
   <p class="hint" id="pleft"></p>
-  <div class="btns">${full>0.5?'<button class="btn ghost" id="pfull">Paid in full</button>':''}<button class="btn" id="psave">Save payment</button></div>
-  ${pays.length?'<div class="day">Payments so far</div>'+pays.map(p=>`<div class="item"><div class="l"><span>${orig(p.amt,p.cur)}</span><span class="tag">${nice(p.date)}</span></div><div class="r"><button class="btn danger small" data-undo="${p.id}">Undo</button></div></div>`).join(''):''}
+  <div class="btns">${full>0?`<button class="btn ghost" id="pfull">${iOwe?'Pay in full':'Paid in full'}</button>`:''}<button class="btn" id="psave">Save payment</button></div>
+  ${pays.length?'<div class="day">Payments so far</div>'+pays.map(p=>`<div class="item"><div class="l"><span>${payTxt(p)}</span><span class="tag">${nice(p.date)}</span></div><div class="r"><button class="btn danger small" data-undo="${p.id}">Undo</button></div></div>`).join(''):''}
   <div class="btns" style="margin-top:14px"><button class="btn ghost" id="pclose">Close</button></div>`;
   $('#modal').hidden=false;
   const upd=()=>{
     $$('#pc button').forEach(b=>b.classList.toggle('on',b.dataset.c===cur));
     const a=+$('#pamt').value||0, left=full-toKHR(a,cur);
-    $('#pleft').textContent=!a?'':left>0.5?`Remaining after this: ${fmt(left)} (${alt(left)})`:left<-0.5?`That is ${fmt(-left)} more than they owe`:'This settles everything ✓';
+    $('#pleft').textContent=!a?'':left>0.5?`Remaining after this: ${fmt(left)} (${alt(left)})`:left<-0.5?`That is ${fmt(-left)} more than ${iOwe?'you owe':'they owe'}`:'This settles everything ✓';
   };
   upd();
   $('#pc').onclick=e=>{if(e.target.dataset.c){cur=e.target.dataset.c;upd()}};
   $('#pamt').oninput=upd;
   $('#pamt').addEventListener('wheel',e=>e.target.blur());
-  if(full>0.5)$('#pfull').onclick=()=>{$('#pamt').value=cur==='USD'?(full/rate()).toFixed(2):Math.round(full);upd()};
+  if(full>0)$('#pfull').onclick=()=>{$('#pamt').value=cur==='USD'?(full/rate()).toFixed(2):Math.round(full);upd()};
   $('#psave').onclick=()=>{
-    const a=+$('#pamt').value; if(!(a>0))return toast('Enter how much they paid');
-    S.payments.push({id:uid(),date:today(),person:n,amt:a,cur});save();toast('Payment saved ✓');payPopup(n);
+    const a=+$('#pamt').value; if(!(a>0))return toast(iOwe?'Enter how much you paid':'Enter how much they paid');
+    S.payments.push({id:uid(),date:today(),person:n,amt:iOwe?-a:a,cur});save();toast('Payment saved ✓');payPopup(n);
   };
   $('#pclose').onclick=()=>$('#modal').hidden=true;
   $('#sheet').onclick=e=>{const id=e.target.dataset.undo;if(id&&confirm('Undo this payment?')){S.payments=S.payments.filter(p=>p.id!==id);S.deleted[id]=Date.now();save();payPopup(n)}};
@@ -222,10 +262,14 @@ function showReceipt(inner,title,extra=''){
 }
 function receipt(n,qid){
   const rows=[];
-  S.entries.forEach(e=>{const v=owes(e)[n];if(v)rows.push({d:e.date,t:`${e.cat}${e.note?' · '+esc(e.note):''}${e.kind==='split'?' (split)':''}`,v})});
-  S.payments.filter(p=>p.person===n).forEach(p=>rows.push({d:p.date,t:`Payment received · ${orig(p.amt,p.cur)}`,v:-toKHR(p.amt,p.cur)}));
+  S.entries.forEach(e=>{const v=owes(e)[n];if(!v)return;
+    if(v>0)rows.push({d:e.date,k:'owe',t:`${e.cat}${e.note?' · '+esc(e.note):''}${e.kind==='split'?' (split)':''}`,v});
+    else rows.push({d:e.date,k:'ded',t:`Deducted · you paid ${orig(e.amt,e.cur)} for ${e.cat}${e.note?' · '+esc(e.note):''}${(e.n||2)>1&&!(e.share>0)?' (my share, split '+(e.n||2)+' ways)':' (my share)'}`,v})});
+  S.payments.filter(p=>p.person===n).forEach(p=>{const k=toKHR(p.amt,p.cur);
+    rows.push(k>=0?{d:p.date,k:'pay',t:`Payment received · ${orig(p.amt,p.cur)}`,v:-k}:{d:p.date,k:'back',t:`I paid you · ${orig(-p.amt,p.cur)}`,v:-k})});
   rows.sort((a,b)=>a.d.localeCompare(b.d));
-  const owed=rows.filter(r=>r.v>0).reduce((s,r)=>s+r.v,0), paid=-rows.filter(r=>r.v<0).reduce((s,r)=>s+r.v,0), left=owed-paid;
+  const sum=k=>rows.filter(r=>r.k===k).reduce((s,r)=>s+Math.abs(r.v),0);
+  const owed=sum('owe'), ded=sum('ded'), paid=sum('pay'), back=sum('back'), left=owed-ded-paid+back;
   const q=qid==='none'?null:S.qrs.find(x=>x.id===(qid||S.settings.qrActive));
   const qr=q&&left>0.5?`<div class="qr"><img src="${q.img}" alt="Payment QR"><div><b>Scan to pay</b><br>${esc(q.name)}<br>${esc(q.note||'')}<br><span class="tag">Type the amount when you pay</span></div></div>`:'';
   const qcur=q?q.id:'none';
@@ -233,8 +277,10 @@ function receipt(n,qid){
   showReceipt(`<h2>Receipt for ${esc(n)}</h2><div class="tag">${nice(today())}</div>
   <table><tr><th>Date</th><th>Item</th><th>Amount</th></tr>${rows.map(r=>`<tr><td>${nice(r.d)}</td><td>${r.t}</td><td>${r.v<0?'−':''}${fmt(Math.abs(r.v))}</td></tr>`).join('')}</table>
   <div class="line"><span>Total owed</span><span>${fmt(owed)}</span></div>
+  ${ded>0.5?`<div class="line"><span>Deducted (what you paid for me)</span><span>− ${fmt(ded)}</span></div>`:''}
   <div class="line"><span>Paid so far</span><span>− ${fmt(paid)}</span></div>
-  <div class="total"><span>${left>0.5?'Still owed':'All settled ✓'}</span><span>${fmt(Math.max(left,0))}</span></div>
+  ${back>0.5?`<div class="line"><span>I paid you</span><span>+ ${fmt(back)}</span></div>`:''}
+  <div class="total"><span>${left>0.5?'Still owed':left<-0.5?'I owe you':'All settled ✓'}</span><span>${fmt(Math.abs(left)>0.5?Math.abs(left):0)}</span></div>
   ${left>0.5?`<div class="tag">${alt(left)}</div>`:''}${qr}`,'Receipt-'+n,chips);
   $('#sheet').onclick=e=>{const id=e.target.dataset.qr;if(id)receipt(n,id)};
 }
@@ -242,7 +288,7 @@ function spendReceipt(){
   const r=hRange(), lab=x=>/^(0000|9999)/.test(x)?'…':nice(x);
   const es=S.entries.filter(e=>inRange(e.date,r)).sort((a,b)=>a.date.localeCompare(b.date)), t=totals(es);
   showReceipt(`<h2>My spending</h2><div class="tag">${lab(r.from)} → ${lab(r.to)}</div>
-  <table><tr><th>Date</th><th>Item</th><th>My share</th></tr>${es.map(e=>`<tr><td>${nice(e.date)}</td><td>${e.cat}${e.note?' · '+esc(e.note):''}${e.kind==='other'?' (paid for '+esc(e.people[0])+')':e.kind==='split'?' (split, total '+orig(e.amt,e.cur)+')':''}</td><td>${e.kind==='other'?'−':orig(mineN(e),e.cur)}</td></tr>`).join('')}</table>
+  <table><tr><th>Date</th><th>Item</th><th>My share</th></tr>${es.map(e=>`<tr><td>${nice(e.date)}</td><td>${e.cat}${e.note?' · '+esc(e.note):''}${e.kind==='other'?' (paid for '+esc(e.people[0])+')':e.kind==='split'?' (split, total '+orig(e.amt,e.cur)+')':e.kind==='theirs'?' ('+esc(e.people[0])+' paid '+orig(e.amt,e.cur)+', my share)':''}</td><td>${e.kind==='other'?'−':orig(mineN(e),e.cur)}</td></tr>`).join('')}</table>
   <div class="line"><span>Spent in riel</span><span>៛${Math.round(t.khr).toLocaleString()}</span></div>
   <div class="line"><span>Spent in USD</span><span>$${t.usd.toFixed(2)}</span></div>
   <div class="line"><span>Lent to others</span><span>${fmt(t.lent)}</span></div>
@@ -359,9 +405,8 @@ function renderCharts(still){
   let h='',last='';
   lst.forEach(e=>{
     if(e.date!==last){last=e.date;h+=`<div class="day">${longDay(e.date)}</div>`}
-    const who=e.kind==='other'?`Paid for ${esc(e.people[0])}`:e.kind==='split'?`Split with ${e.people.map(esc).join(', ')}`:'Just me';
-    h+=`<div class="item"><div class="l"><span><span class="dot" style="background:${catCol(e.cat)}"></span> ${e.cat}</span><span class="tag">${who}${e.note?' · '+esc(e.note):''}</span></div>
-      <div class="r"><b>${orig(e.amt,e.cur)}</b>${e.kind!=='me'?`<span class="tag">my share ${fmt(mine(e))}</span>`:''}</div></div>`;
+    h+=`<div class="item"><div class="l"><span><span class="dot" style="background:${catCol(e.cat)}"></span> ${e.cat}</span><span class="tag">${who(e)}${e.note?' · '+esc(e.note):''}</span></div>
+      <div class="r"><b>${orig(e.amt,e.cur)}</b>${shareTags(e)}</div></div>`;
   });
   $('#chList').innerHTML=h||'<p class="hint">Nothing in this range.</p>';
 
