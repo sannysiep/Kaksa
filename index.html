@@ -24,16 +24,17 @@
         <small id="heroLab"></small>
         <b id="sTotal"></b>
         <div class="split"><span id="sKHR"></span><span id="sUSD"></span></div>
-        <div class="mini"><div><small>Lent out</small><b id="sLent"></b></div><div><small>Still owed to me</small><b id="sOwed" class="gold"></b></div></div>
+        <div class="mini"><div><small>Lent out</small><b id="sLent"></b></div><div><small>Still owed to me</small><b id="sOwed" class="gold"></b></div><div id="iOweBox" hidden style="grid-column:1/-1"><small>I owe others</small><b id="sIOwe" class="rose"></b></div></div>
       </div>
       <button class="icon" id="nextC">›</button>
     </div>
 
     <div class="card" id="formCard">
       <div class="seg" id="kind">
-        <button data-k="me" class="on">Just me</button>
-        <button data-k="other">Paid for someone</button>
-        <button data-k="split">Split</button>
+        <button data-k="me" class="on">🙋 Just me</button>
+        <button data-k="other">🎁 Paid for someone</button>
+        <button data-k="split">✂️ Split</button>
+        <button data-k="theirs">🤝 They paid</button>
       </div>
       <div id="parkRow" class="park" hidden>
         <button class="icon" id="pMinus">−</button>
@@ -52,6 +53,17 @@
         <div class="chips" id="people"></div>
         <div class="row"><input id="newPerson" placeholder="Add a new name"><button class="btn ghost" id="addPerson">Add</button></div>
         <p id="splitHint" class="hint"></p>
+      </div>
+      <div id="theirBox" hidden>
+        <label>Shared between how many people? <span class="hint">(count yourself and the person who paid)</span></label>
+        <div class="park">
+          <button class="icon" id="nMinus">−</button>
+          <div class="pc"><input id="nPeople" type="number" inputmode="numeric" min="1" value="2"><small>people sharing</small></div>
+          <button class="icon" id="nPlus">+</button>
+        </div>
+        <label>My share <span class="hint">(optional, leave empty for an equal split)</span></label>
+        <input id="myShare" type="number" inputmode="decimal" step="any" placeholder="e.g. 5000">
+        <p id="theirHint" class="hint"></p>
       </div>
       <label>Date <span class="hint">(past days are fine, future days are not)</span></label>
       <input id="date" type="date">
