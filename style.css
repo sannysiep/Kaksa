@@ -195,3 +195,7 @@ nav button{min-width:0}
 
 /* v11 */
 .rdl.dl{color:var(--mut);font-size:.7rem}
+
+/* v12: "They paid" button grid */
+#kind{display:grid;grid-template-columns:1fr 1fr}
+#kind button{padding:11px 6px}
