@@ -35,9 +35,13 @@ function periodOf(d){
 function analyze(t,per,prev){
   const cfg=BT[t], price=+S.bill[cfg.price]||0, bud=+S.bill[cfg.bud]||0, endT=dn(per.to)+1;
   const pts=S.readings.filter(r=>r.type===t&&r.date>=per.from&&r.date<=per.to).map(r=>({...r,val:+r.val,T:rT(r)})).sort((a,b)=>a.T-b.T||a.val-b.val);
-  /* old readings with no time that share a day: spread them 6 hours apart (lowest meter value first) */
+  /* readings with no time: they count as the end of their day, but never later than right now.
+     Two or more on one day are spread apart (lowest meter value first) */
   const grp={}; pts.forEach(p=>{if(!p.time)(grp[p.date]=grp[p.date]||[]).push(p)});
-  Object.values(grp).forEach(g=>{if(g.length>1)g.forEach((p,i)=>{p.T=dn(p.date)+.9993-(g.length-1-i)*.25;p.guess=true})});
+  Object.entries(grp).forEach(([d,g])=>{
+    const end=d===today()?Math.max(.02,nowT()-dn(d)-.0007):.9993, step=Math.min(.25,(end-.01)/g.length);
+    g.forEach((p,i)=>{p.T=dn(d)+end-(g.length-1-i)*step;p.guess=g.length>1});
+  });
   pts.sort((a,b)=>a.T-b.T||a.val-b.val);
   for(let i=1;i<pts.length;i++)if(pts[i].T<=pts[i-1].T)pts[i].T=pts[i-1].T+1/1440;
   const an={t,cfg,price,bud,per,pts,ready:false};
@@ -66,10 +70,10 @@ function analyze(t,per,prev){
     const kEnd=Math.min(en,TL), kLen=s<TL?kEnd-s:0, uK=s<TL?Rat(kEnd)-Rat(s):0;
     const eLen=en>TL?en-Math.max(s,TL):0, uE=ew*eLen;
     const rd=pts.filter(p=>Math.floor(p.T)===d);
-    rows.push({d:fromDn(d),dnum:d,u:uK+uE,uK,uE,len:en-s,kLen,rd,est:!rd.length||uE>0});
+    rows.push({d:fromDn(d),dnum:d,u:uK+uE,uK,uE,eLen,len:en-s,kLen,rd,est:!rd.length||eLen>.01});
   }
   /* 5. statistics over days that are at least half covered by readings */
-  let us=rows.filter(r=>r.kLen>=.5).map(r=>r.uK/r.kLen); if(!us.length)us=[used/span];
+  let us=rows.filter(r=>r.kLen>=.85).map(r=>r.uK/r.kLen); if(!us.length)us=[used/span];
   const n=us.length, avgDay=us.reduce((a,b)=>a+b,0)/n;
   const sd=Math.sqrt(us.reduce((s,u)=>s+(u-avgDay)**2,0)/n);
   const avg=used/span, w7=Math.min(7,span);
@@ -79,8 +83,8 @@ function analyze(t,per,prev){
   if(n>=5){const mx=(n-1)/2;let sxy=0,sxx=0;us.forEach((u,i)=>{sxy+=(i-mx)*(u-avgDay);sxx+=(i-mx)**2});slope=sxx?sxy/sxx:0}
   const trendWk=slope!==null&&avg>0?slope*7/avg*100:null;
   const thr=n>=5&&sd>0?avgDay+1.5*sd:Infinity;
-  rows.forEach(r=>{r.spike=r.rd.length>0&&r.uE===0&&r.kLen>=.5&&r.uK/r.kLen>thr});
-  const full=rows.filter(r=>r.kLen>=.5);
+  rows.forEach(r=>{r.spike=r.rd.length>0&&r.eLen<=.01&&r.kLen>=.85&&r.uK/r.kLen>thr});
+  const full=rows.filter(r=>r.kLen>=.85);
   const peak=full.length?full.reduce((a,b)=>b.uK/b.kLen>a.uK/a.kLen?b:a):{d:rows[0].d,uK:used,kLen:span};
   peak.rate=peak.uK/peak.kLen;
   /* 6. now, and the end of the period */
@@ -106,7 +110,7 @@ function bCard(an){
     <p class="hint">${an.pts.length?'One reading saved. Add a second one (even a few hours later) and I will work everything out.':`Add your starting meter reading for ${nice(an.per.from)}, then another one later. I will work out the cost, per-day use, a forecast and a verdict.`}</p>${readingsList(an)}</div>`;
   }
   const pr=an.price>0, money=x=>pr?fmt(x):'set price', ph=x=>(+x).toFixed(t==='elec'?2:3);
-  const [tone,vt]=an.verdict, vsAvg=an.avg>0?(an.recent/an.avg-1)*100:0, li=an.last;
+  const prevOf=new Map(an.pts.map((p,i)=>[p.id,an.pts[i-1]])), [tone,vt]=an.verdict, vsAvg=an.avg>0?(an.recent/an.avg-1)*100:0, li=an.last;
   const liKnown=!(li.a.guess||li.b.guess)&&!((!li.a.time||!li.b.time)&&li.a.date===li.b.date);
   let tiles=`
     <div class="tile"><small>Per day (average)</small><b>${num(an.avg,t)} ${u}</b><span class="tag">${money(an.avg*an.price)} a day</span></div>
@@ -140,11 +144,14 @@ function bCard(an){
   if(!(an.bud>0))notes.push('Add a budget at the bottom to get a clear okay / too-much verdict.');
   /* day-by-day table, newest first. Days with readings list every reading with its time. */
   const dayRows=[...an.rows].reverse().map(r=>{
-    const rd=r.rd.length?r.rd.map(p=>`<span class="rdl"><b>${p.time||'—'}</b> ${num(p.val,t)}</span>`).join(''):'<span class="rdl">≈</span>';
-    const part=r.len<.99?`<small>${dur(r.len)}${r.uE>0?' (est.)':''}</small>`:'';
+    const rd=r.rd.length?r.rd.map(p=>{
+      const q=prevOf.get(p.id), ok=q&&!p.guess&&!q.guess&&p.time&&q.time;
+      return `<span class="rdl"><b>${p.time||'—'}</b> ${num(p.val,t)}</span>`+(q?`<span class="rdl dl">+${num(p.val-q.val,t)}${ok?' in '+dur(p.T-q.T):''}</span>`:'<span class="rdl dl">start</span>');
+    }).join(''):'<span class="rdl">≈</span>';
+    const part=r.len<.99?`<small>${dur(r.len)}${r.eLen>.01?' (est.)':''}</small>`:'';
     return `<tr class="${r.spike?'spike':r.est?'est':''}"><td>${wd(r.d)}${r.spike?' 🔥':''}</td><td class="rd">${rd}</td><td>${r.len<.02?'—':num(r.u,t)+part}</td><td>${r.len<.02||!pr?'—':fmt(r.u*an.price)}</td></tr>`;
   }).join('');
-  const dayTab=`<table class="btab"><tr><th>Day</th><th>Readings</th><th>Used</th><th>Cost</th></tr>${dayRows}</table><p class="hint">Every reading you typed is listed on its day with the time. ≈ = no reading that day, so the use is spread evenly between the readings around it.</p>`;
+  const dayTab=`<table class="btab"><tr><th>Day</th><th>Readings</th><th>Day total</th><th>Cost</th></tr>${dayRows}</table><p class="hint">Under each reading, + is the change since the reading before it. Day total is the whole calendar day, from midnight, so it also counts the use between your last reading yesterday and the first one today. ≈ = no reading that day, so the use is spread evenly between the readings around it.</p>`;
   /* change between readings, newest first */
   const intRows=[...an.ints].reverse().map(x=>{
     const known=!(x.a.guess||x.b.guess)&&!((!x.a.time||!x.b.time)&&x.a.date===x.b.date), approx=!x.a.time||!x.b.time;
