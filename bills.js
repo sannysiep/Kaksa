@@ -7,7 +7,7 @@ const BT={
   elec:{name:'Electricity',icon:'⚡',unit:'kWh',col:'#f5b942',price:'elecPrice',bud:'elecBudget',dec:1,card:'#bElec'},
   water:{name:'Water',icon:'💧',unit:'m³',col:'#7aa2ff',price:'waterPrice',bud:'waterBudget',dec:2,card:'#bWater'}
 };
-let bOff=0, bType='elec', bCharts={}, bEditId=null, bAuto=true;
+let bOff=0, bType='elec', bCharts={}, bEditId=null, bAuto=true, bFound=[];
 /* day numbers in UTC so daylight-saving can never shift a day */
 const dn=d=>Date.UTC(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10))/864e5;
 const fromDn=n=>new Date(n*864e5).toISOString().slice(0,10);
@@ -281,12 +281,21 @@ function recoverFrom(snaps){
   /* skip ones that are already back under a new id (same type, date, time and value) */
   const same=r=>S.readings.some(x=>x.type===r.type&&x.date===r.date&&(x.time||'')===(r.time||'')&&+x.val===+r.val);
   const list=Object.values(found).filter(r=>!same(r)).sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
-  if(!list.length)return toast('No missing readings found');
-  const txt=list.slice(0,15).map(r=>`${BT[r.type].name}: ${r.val} ${BT[r.type].unit} · ${r.date}${r.time?' '+r.time:''}`).join('\n');
-  if(!confirm(`Found ${list.length} reading(s) that are not in your data now:\n\n${txt}${list.length>15?'\n…':''}\n\nRestore them? (One you deleted on purpose would come back too, you can delete it again.)`))return;
-  list.forEach(r=>S.readings.push({id:uid(),type:r.type,date:r.date,...(r.time?{time:r.time}:{}),val:+r.val}));
-  save();toast(`Restored ${list.length} reading${list.length>1?'s':''} ✓`);
+  bFound=list.sort((x,y)=>(y.date+(y.time||'')).localeCompare(x.date+(x.time||'')));
+  drawFound();
+  toast(list.length?`Found ${list.length} missing reading${list.length>1?'s':''}. Pick the ones to restore.`:'No missing readings found');
 }
+/* each found reading gets its own Restore / Skip button */
+function drawFound(){
+  $('#bRecList').innerHTML=bFound.length?`<p class="hint">Tap Restore only on the ones you want back. A reading you deleted on purpose can show up here too, just tap Skip.</p>`+bFound.map(r=>`<div class="item"><div class="l"><span>${BT[r.type].icon} ${num(r.val,r.type)} ${BT[r.type].unit}</span><span class="tag">${nice(r.date)} · ${r.time||'time not set'}</span></div><div class="r acts"><button class="btn small" data-rrec="${r.id}">Restore</button><button class="btn ghost small" data-rskip="${r.id}">Skip</button></div></div>`).join(''):'';
+}
+$('#bRecList').onclick=e=>{
+  const rec=e.target.dataset.rrec, skip=e.target.dataset.rskip, id=rec||skip; if(!id)return;
+  const r=bFound.find(x=>x.id===id); if(!r)return;
+  bFound=bFound.filter(x=>x.id!==id);
+  if(rec){S.readings.push({id:uid(),type:r.type,date:r.date,...(r.time?{time:r.time}:{}),val:+r.val});save();toast('Restored ✓')}
+  drawFound();
+};
 $('#bRecGist').onclick=async()=>{
   if(!sync.token||!sync.id)return toast('Sync history needs your GitHub sync set up in Settings. Try "From a backup file", or add the reading again with its time.');
   toast('Searching your sync history…');
