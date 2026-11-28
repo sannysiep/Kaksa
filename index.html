@@ -7,7 +7,7 @@
 <title>Kaksa · Spending Tracker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
@@ -137,9 +137,10 @@
     <div class="card">
       <h3>Add a meter reading</h3>
       <div class="seg" id="bType"><button data-t="elec" class="on">⚡ Electricity</button><button data-t="water">💧 Water</button></div>
-      <div class="row"><input type="date" id="bDate"><input id="bVal" type="number" inputmode="decimal" step="any" placeholder="Meter reading"></div>
+      <div class="row"><input type="date" id="bDate"><input type="time" id="bTime"></div>
+      <input id="bVal" type="number" inputmode="decimal" step="any" placeholder="Meter reading">
       <p class="hint" id="bHint"></p>
-      <button class="btn" id="bSave">Save reading</button>
+      <div class="row"><button class="btn" id="bSave">Save reading</button><button class="btn ghost" id="bCancel" hidden>Cancel</button></div>
     </div>
     <div id="bElec"></div>
     <div id="bWater"></div>
@@ -155,6 +156,12 @@
       <input id="bWaterBud" type="number" inputmode="decimal" step="any">
       <p class="hint">Use the price your landlord or the utility charges you. The budget is what you want one bill to stay under. It gives you a clear "okay or too much" answer.</p>
       <button class="btn" id="bSaveP">Save prices</button>
+    </div>
+    <div class="card">
+      <h3>Recover lost readings</h3>
+      <p class="hint">Older versions replaced a reading when you saved a second one on the same day. This looks for readings that are missing now, in your sync history or in a backup file, and lets you restore them.</p>
+      <div class="row"><button class="btn" id="bRecGist">Search sync history</button><button class="btn ghost" id="bRecFile">From a backup file</button></div>
+      <input type="file" id="bRecIn" accept=".json" hidden>
     </div>
   </section>
 
@@ -241,7 +248,7 @@
 <div id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="app.js?v=9"></script>
-<script src="bills.js?v=9"></script>
+<script src="app.js"></script>
+<script src="bills.js"></script>
 </body>
 </html>
